@@ -475,7 +475,7 @@ export function PaymentModal({
                 <h3 className="text-lg font-semibold text-slate-900 mb-4">Pilih Metode Pembayaran</h3>
                 
                 {isDemoPaymentMode ? (
-                  <div className="space-y-3">
+                  <div className="space-y-2">
                     {/* E-Wallet Section */}
                     <label className={`p-4 border-2 rounded-xl cursor-pointer transition ${paymentMethod === 'ewallet' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
                       <div className="flex items-start gap-3">
