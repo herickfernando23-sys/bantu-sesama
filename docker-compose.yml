@@ -1,0 +1,26 @@
+version: '3.8'
+services:
+  db:
+    image: postgres:15
+    environment:
+      POSTGRES_DB: microcrowd
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+    volumes:
+      - db-data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: ./server
+    env_file: ./server/.env.example
+    environment:
+      NODE_ENV: production
+      TRUST_PROXY: "1"
+    depends_on:
+      - db
+    ports:
+      - "4000:4000"
+
+volumes:
+  db-data:

@@ -1,0 +1,1356 @@
+import { useState, useEffect, useRef } from 'react';
+import { Navbar } from './components/Navbar';
+import { CampaignCard } from './components/CampaignCard';
+import { CampaignDetail } from './components/CampaignDetail';
+import { DonasiSaya } from './components/DonasiSaya';
+import { CreateCampaign } from './components/CreateCampaign';
+import { LoginRegister } from './components/LoginRegister';
+import { AdminLogin } from './components/AdminLogin';
+import { AdminDashboard } from './components/AdminDashboard';
+import { Chatbot } from './components/Chatbot';
+import { TrendingUp, Shield, Users, Heart } from 'lucide-react';
+
+type Page =
+  | 'kampanye'
+  | 'donasi-saya'
+  | 'cara-kerja'
+  | 'login'
+  | 'buat-kampanye'
+  | 'panel'
+  | 'admin'
+  | 'admin-login'
+  | 'home'
+  | 'tentang-kami'
+  | 'syarat-ketentuan'
+  | 'kebijakan-privasi'
+  | 'faq'
+  | 'hubungi-kami'
+  | 'panduan-donatur'
+  | 'panduan-penggalang'
+  | null;
+
+type CampaignStatus = 'verified' | 'pending' | 'rejected';
+
+type WithdrawalStatus = 'Pending' | 'Success' | 'Rejected';
+
+type CampaignRecord = {
+  id: number;
+  createdAt?: number;
+  creatorEmail?: string;
+  title: string;
+  description: string;
+  fullDescription: string;
+  image: string;
+  location: string;
+  target: number;
+  collected: number;
+  donors: number;
+  daysLeft: number;
+  category: string;
+  organizer: string;
+  story: string;
+  fundAllocation: Array<{ name: string; value: number; color: string }>;
+  disbursementHistory: Array<{ date: string; amount: number; purpose: string }>;
+  donations?: Array<{ name: string; amount: number; message: string; timestamp: number }>;
+  status?: CampaignStatus;
+};
+
+type WithdrawalRequest = {
+  id: number;
+  campaignId: number;
+  campaignTitle: string;
+  requestedByName: string;
+  requestedByEmail: string;
+  amount: number;
+  note: string;
+  status: WithdrawalStatus;
+  createdAt: number;
+  updatedAt: number;
+};
+
+type AdminUserRow = {
+  id: number;
+  name: string;
+  email: string;
+  role: 'user' | 'admin';
+  status: 'active' | 'pending';
+  campaignCount: number;
+};
+
+type AppUser = {
+  name: string;
+  email?: string;
+};
+
+type StoredUser = {
+  name: string;
+  email: string;
+  password: string;
+};
+
+const campaignStorageKey = 'bantusesama-campaigns';
+const registeredUsersKey = 'bantusesama-registered-users';
+const adminSessionKey = 'bantusesama-admin-session';
+const withdrawalRequestsKey = 'bantusesama-withdrawal-requests';
+
+const loadRegisteredUsersFromStorage = () => {
+  if (typeof window === 'undefined') {
+    return [] as StoredUser[];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(registeredUsersKey);
+    const parsed = raw ? (JSON.parse(raw) as StoredUser[]) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [] as StoredUser[];
+  }
+};
+
+const loadAdminSessionFromStorage = () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(adminSessionKey);
+    return raw ? (JSON.parse(raw) as AppUser) : null;
+  } catch {
+    return null;
+  }
+};
+
+const loadWithdrawalRequestsFromStorage = () => {
+  if (typeof window === 'undefined') {
+    return [] as WithdrawalRequest[];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(withdrawalRequestsKey);
+    const parsed = raw ? (JSON.parse(raw) as WithdrawalRequest[]) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [] as WithdrawalRequest[];
+  }
+};
+
+type InfoPageKey = Exclude<Page, 'kampanye' | 'donasi-saya' | 'cara-kerja' | 'login' | 'buat-kampanye' | 'panel' | 'admin' | 'admin-login' | 'home' | null>;
+
+const infoPageContent: Record<InfoPageKey, { eyebrow: string; title: string; description: string; points: string[] }> = {
+  'tentang-kami': {
+    eyebrow: 'Tentang BantuSesama',
+    title: 'Platform crowdfunding untuk UMKM yang terdampak bencana',
+    description: 'BantuSesama mempertemukan donatur dengan pelaku UMKM yang butuh bantuan cepat, transparan, dan mudah dipantau.',
+    points: [
+      'Dana dicatat secara transparan dari penggalangan sampai pencairan.',
+      'Kampanye yang tampil di halaman publik melewati proses verifikasi.',
+      'Riwayat penggunaan dana bisa dipantau langsung di dashboard kampanye.'
+    ]
+  },
+  'syarat-ketentuan': {
+    eyebrow: 'Aturan Layanan',
+    title: 'Syarat dan ketentuan penggunaan platform',
+    description: 'Halaman ini menjelaskan tanggung jawab pengguna, kebijakan kampanye, dan batasan layanan.',
+    points: [
+      'Pengguna wajib memberikan data yang benar saat mendaftar atau membuat kampanye.',
+      'Setiap kampanye dapat ditinjau atau ditolak jika tidak memenuhi kebijakan platform.',
+      'Kami dapat memperbarui ketentuan ini saat layanan berkembang.'
+    ]
+  },
+  'kebijakan-privasi': {
+    eyebrow: 'Privasi',
+    title: 'Cara kami mengelola data pribadi',
+    description: 'Kami hanya menggunakan data untuk menjalankan layanan, memproses donasi, dan menjaga keamanan akun.',
+    points: [
+      'Data akun dipakai untuk otentikasi dan riwayat aktivitas.',
+      'Informasi donatur dipakai untuk bukti transaksi dan notifikasi layanan.',
+      'Kami tidak menjual data pribadi pengguna kepada pihak lain.'
+    ]
+  },
+  faq: {
+    eyebrow: 'Bantuan Cepat',
+    title: 'Pertanyaan yang sering diajukan',
+    description: 'Ringkasan singkat untuk pertanyaan umum tentang donasi, kampanye, dan pencairan dana.',
+    points: [
+      'Apakah donasi bisa dipantau? Ya, setiap kampanye punya ringkasan progres dan pencairan.',
+      'Siapa yang bisa membuat kampanye? Pengguna yang sudah login dan memenuhi syarat platform.',
+      'Bagaimana kalau butuh bantuan? Gunakan halaman Hubungi Kami untuk mengirim pertanyaan.'
+    ]
+  },
+  'hubungi-kami': {
+    eyebrow: 'Kontak',
+    title: 'Hubungi tim BantuSesama',
+    description: 'Gunakan kanal berikut jika butuh bantuan terkait kampanye, donasi, atau verifikasi akun.',
+    points: [
+      'Email: info@bantusesama.id',
+      'WhatsApp: 0812-3456-7890',
+      'Jam respons: Senin sampai Jumat, 09.00 - 17.00 WIB'
+    ]
+  },
+  'panduan-donatur': {
+    eyebrow: 'Panduan Donatur',
+    title: 'Langkah singkat untuk mulai berdonasi',
+    description: 'Panduan ini membantu donatur baru menyelesaikan transaksi dengan aman dan jelas.',
+    points: [
+      'Pilih kampanye yang ingin dibantu dari halaman utama.',
+      'Isi nama, email, dan nominal donasi sebelum lanjut ke pembayaran.',
+      'Pantau status donasi di halaman Donasi Saya setelah login.'
+    ]
+  },
+  'panduan-penggalang': {
+    eyebrow: 'Panduan Penggalang',
+    title: 'Cara membuat kampanye yang lebih siap diverifikasi',
+    description: 'Gunakan panduan ini agar kampanye Anda lebih lengkap sebelum dikirim ke tim verifikasi.',
+    points: [
+      'Tulis judul, deskripsi, dan cerita lengkap yang jelas dan jujur.',
+      'Cantumkan target dana dan lokasi yang realistis.',
+      'Tambahkan foto pendukung agar kampanye lebih meyakinkan.'
+    ]
+  }
+};
+
+function InfoPage({ page, onNavigate, onHome }: { page: InfoPageKey; onNavigate: (nextPage: string) => void; onHome: () => void; }) {
+  const content = infoPageContent[page];
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Navbar onNavigate={onNavigate} onHome={onHome} />
+      <section className="py-16">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="rounded-3xl bg-white shadow-sm border border-gray-200 p-8 md:p-12">
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-blue-600 mb-4">{content.eyebrow}</p>
+            <h1 className="text-3xl md:text-4xl font-bold text-gray-900 mb-4">{content.title}</h1>
+            <p className="text-gray-600 text-lg mb-8">{content.description}</p>
+            <div className="grid md:grid-cols-3 gap-4">
+              {content.points.map((point) => (
+                <div key={point} className="rounded-2xl bg-blue-50 border border-blue-100 p-5 text-gray-700">
+                  {point}
+                </div>
+              ))}
+            </div>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button onClick={onHome} className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium">
+                Kembali ke Beranda
+              </button>
+              <button onClick={() => onNavigate('kampanye')} className="px-5 py-3 border border-gray-300 rounded-lg hover:bg-gray-100 font-medium text-gray-700">
+                Lihat Kampanye
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+      <Chatbot />
+    </div>
+  );
+}
+
+export default function App() {
+  const persistedAdminUser = loadAdminSessionFromStorage();
+  const initialPage: Page = window.location.pathname.startsWith('/admin')
+    ? (persistedAdminUser ? 'admin' : 'admin-login')
+    : null;
+  const [selectedCampaign, setSelectedCampaign] = useState<number | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState('Semua Kategori');
+  const [sortBy, setSortBy] = useState('Terbaru');
+  const [page, setPage] = useState<Page>(initialPage);
+  const [user, setUser] = useState<AppUser | null>(null);
+  const [adminUser, setAdminUser] = useState<AppUser | null>(persistedAdminUser);
+  const [registeredUsers, setRegisteredUsers] = useState<StoredUser[]>(() => loadRegisteredUsersFromStorage());
+  const [deletedUserEmails, setDeletedUserEmails] = useState<string[]>([]);
+  const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>(() => loadWithdrawalRequestsFromStorage());
+  const [rejectUndoState, setRejectUndoState] = useState<{ campaignId: number; previousStatus?: CampaignStatus; expiresAt: number } | null>(null);
+  const [deletedUserUndoState, setDeletedUserUndoState] = useState<{ email: string; userData: StoredUser | null; removedCampaigns: CampaignRecord[]; expiresAt: number } | null>(null);
+  const [undoNow, setUndoNow] = useState(Date.now());
+  const [campaignsHydrated, setCampaignsHydrated] = useState(false);
+  const rejectUndoTimeoutRef = useRef<number | null>(null);
+  const deletedUserUndoTimeoutRef = useRef<number | null>(null);
+
+  const campaignStorageKey = 'bantusesama-campaigns';
+
+  const loadCampaignsFromStorage = () => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(campaignStorageKey);
+      if (!raw) {
+        return null;
+      }
+
+      const parsed = JSON.parse(raw) as CampaignRecord[];
+      return Array.isArray(parsed) ? parsed : null;
+    } catch {
+      return null;
+    }
+  };
+
+  const getCampaignIdFromUrl = () => {
+    const campaignParam = new URLSearchParams(window.location.search).get('campaign');
+    if (!campaignParam) {
+      return null;
+    }
+
+    const parsedCampaignId = Number(campaignParam);
+    return Number.isFinite(parsedCampaignId) ? parsedCampaignId : null;
+  };
+
+  useEffect(() => {
+    const syncFromHistory = () => {
+      const state = window.history.state as { view?: string; campaignId?: number } | null;
+      const campaignIdFromUrl = getCampaignIdFromUrl();
+
+      if (state?.view === 'campaign' && typeof state.campaignId === 'number') {
+        setSelectedCampaign(state.campaignId);
+        setPage(null);
+        return;
+      }
+
+      if (campaignIdFromUrl) {
+        setSelectedCampaign(campaignIdFromUrl);
+        setPage(null);
+        window.history.replaceState({ view: 'campaign', campaignId: campaignIdFromUrl }, '', `/?campaign=${campaignIdFromUrl}`);
+        return;
+      }
+
+      setSelectedCampaign(null);
+      setPage((state?.view as Page) ?? null);
+    };
+
+    const campaignIdFromUrl = getCampaignIdFromUrl();
+    const initialView = window.location.pathname.startsWith('/admin') ? 'admin-login' : 'home';
+    const initialPath = window.location.pathname.startsWith('/admin') ? '/admin' : '/';
+
+    if (campaignIdFromUrl) {
+      setSelectedCampaign(campaignIdFromUrl);
+      window.history.replaceState({ view: 'campaign', campaignId: campaignIdFromUrl }, '', `/?campaign=${campaignIdFromUrl}`);
+    } else {
+      window.history.replaceState({ view: initialView }, '', initialPath + window.location.search);
+    }
+    window.addEventListener('popstate', syncFromHistory);
+
+    return () => window.removeEventListener('popstate', syncFromHistory);
+  }, []);
+
+  const openCampaign = (campaignId: number) => {
+    setSelectedCampaign(campaignId);
+    setPage(null);
+    window.history.pushState(
+      { view: 'campaign', campaignId },
+      '',
+      `/?campaign=${campaignId}`
+    );
+  };
+
+  const closeCampaign = () => {
+    if (window.history.state?.view === 'campaign') {
+      window.history.back();
+      return;
+    }
+
+    setSelectedCampaign(null);
+  };
+
+  const goHome = () => {
+    setSelectedCampaign(null);
+    setPage(null);
+    window.history.pushState(
+      { view: 'home' },
+      '',
+      '/'
+    );
+  };
+
+  const navigatePage = (nextPage: string) => {
+    const resolvedPage = nextPage as Page;
+
+    setSelectedCampaign(null);
+
+    setPage(resolvedPage);
+    const nextPath = resolvedPage === 'admin' || resolvedPage === 'admin-login' ? '/admin' : '/';
+    window.history.pushState(
+      { view: resolvedPage ?? 'home' },
+      '',
+      nextPath
+    );
+  };
+
+  const [campaigns, setCampaigns] = useState<CampaignRecord[]>(() => [
+    {
+      id: 1,
+      createdAt: 1711238400000,
+      title: 'Warung Makan Bu Siti Terdampak Banjir',
+      description: 'Warung makan yang menjadi sumber penghidupan keluarga rusak akibat banjir. Butuh bantuan untuk renovasi dan pembelian peralatan baru.',
+      fullDescription: 'Warung makan Bu Siti yang sudah berdiri 15 tahun di Kampung Melayu menjadi sumber penghidupan keluarga',
+      image: 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      location: 'Jakarta Timur',
+      target: 15000000,
+      collected: 8500000,
+      donors: 143,
+      daysLeft: 25,
+      category: 'UMKM Terdampak Bencana',
+      organizer: 'Karang Taruna Jakarta Timur',
+      story: `Bu Siti (52 tahun) adalah pemilik warung makan sederhana di Kampung Melayu, Jakarta Timur yang sudah berdiri sejak 15 tahun lalu. Warung ini menjadi satu-satunya sumber penghasilan untuk menghidupi keluarganya, termasuk dua anaknya yang masih bersekolah.
+
+Pada tanggal 15 Maret 2026, banjir besar melanda kawasan tersebut dengan ketinggian air mencapai 1,5 meter. Warung Bu Siti terendam selama 3 hari, mengakibatkan:
+- Semua peralatan dapur (kompor gas, panci, wajan) rusak total
+- Kulkas dan freezer tidak bisa digunakan lagi
+- Meja dan kursi kayu rusak dan berjamur
+- Bahan makanan dan bumbu habis terendam
+- Keramik lantai dan cat dinding rusak
+
+Total kerugian diperkirakan mencapai Rp 15.000.000. Bu Siti sudah berusaha membuka kembali warungnya dengan peralatan seadanya, namun sangat kesulitan karena tidak memiliki modal untuk membeli peralatan baru.
+
+Dana yang terkumpul akan digunakan untuk:
+1. Renovasi warung (cat ulang, perbaikan lantai) - Rp 4.000.000
+2. Peralatan dapur lengkap - Rp 5.000.000
+3. Kulkas dan freezer - Rp 4.000.000
+4. Modal awal bahan makanan - Rp 2.000.000
+
+Mari kita bantu Bu Siti untuk bangkit kembali dan melanjutkan usahanya! 🙏`,
+      fundAllocation: [
+        { name: 'Renovasi', value: 4000000, color: '#10B981' },
+        { name: 'Peralatan Dapur', value: 5000000, color: '#3B82F6' },
+        { name: 'Kulkas & Freezer', value: 4000000, color: '#F59E0B' },
+        { name: 'Modal Bahan', value: 2000000, color: '#EF4444' }
+      ],
+      disbursementHistory: [
+        { date: '25 Mar', amount: 3000000, purpose: 'Pencairan Tahap 1: Renovasi Awal' },
+        { date: '1 Apr', amount: 2500000, purpose: 'Pembelian Peralatan Dapur' },
+        { date: '10 Apr', amount: 3000000, purpose: 'Pembelian Kulkas & Freezer' }
+      ]
+    },
+    {
+      id: 2,
+      createdAt: 1712620800000,
+      title: 'Pedagang Pasar Kebakaran Butuh Modal Usaha',
+      description: 'Puluhan pedagang pasar kehilangan dagangan akibat kebakaran. Butuh bantuan modal untuk memulai usaha kembali.',
+      fullDescription: 'Kebakaran hebat di Pasar Minggu menghanguskan 45 kios pedagang',
+      image: 'https://images.unsplash.com/photo-1774370793502-85098cd3fd00?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwyfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      location: 'Jakarta Selatan',
+      target: 50000000,
+      collected: 32500000,
+      donors: 287,
+      daysLeft: 18,
+      category: 'UMKM Terdampak Bencana',
+      organizer: 'Paguyuban Pedagang Pasar Minggu',
+      story: `Pada dini hari tanggal 5 April 2026, kebakaran hebat melanda Pasar Minggu, Jakarta Selatan. Api yang berasal dari korsleting listrik dengan cepat melalap 45 kios pedagang yang mayoritas berjualan bahan makanan, pakaian, dan kebutuhan sehari-hari.
+
+Kerugian yang dialami:
+- 45 kios pedagang hangus terbakar
+- Ribuan barang dagangan musnah
+- Tidak ada asuransi yang dapat menanggung kerugian
+- Pedagang kehilangan sumber mata pencaharian
+
+Para pedagang ini adalah kepala keluarga yang menggantungkan hidup dari berjualan di pasar. Mereka sudah berdagang puluhan tahun dan memiliki pelanggan setia. Namun, kebakaran ini membuat mereka kehilangan segalanya.
+
+Target dana Rp 50.000.000 akan dibagikan kepada 45 pedagang (sekitar Rp 1.111.000 per pedagang) sebagai modal awal untuk:
+- Membeli barang dagangan
+- Menyewa kios sementara
+- Peralatan berjualan
+
+Dengan bantuan Anda, para pedagang dapat bangkit dan melanjutkan usaha mereka. Setiap rupiah sangat berarti! 🙏`,
+      fundAllocation: [
+        { name: 'Modal Dagangan', value: 30000000, color: '#10B981' },
+        { name: 'Sewa Kios', value: 15000000, color: '#3B82F6' },
+        { name: 'Peralatan', value: 5000000, color: '#F59E0B' }
+      ],
+      disbursementHistory: [
+        { date: '8 Apr', amount: 10000000, purpose: 'Pencairan Tahap 1: Modal untuk 10 pedagang' },
+        { date: '15 Apr', amount: 12500000, purpose: 'Pencairan Tahap 2: Modal untuk 12 pedagang' },
+        { date: '22 Apr', amount: 10000000, purpose: 'Pencairan Tahap 3: Sewa kios sementara' }
+      ]
+    },
+    {
+      id: 3,
+      createdAt: 1714012800000,
+      title: 'Tukang Sate Pak Joko Kehilangan Gerobak',
+      description: 'Gerobak sate yang menjadi sumber penghidupan hilang dicuri. Butuh bantuan untuk membeli gerobak dan peralatan baru.',
+      fullDescription: 'Pak Joko kehilangan gerobak sate yang menjadi sumber penghidupan',
+      image: 'https://images.unsplash.com/photo-1762592957827-99db60cfd0c7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cmFkaXRpb25hbCUyMG1hcmtldCUyMGZvb2QlMjB2ZW5kb3J8ZW58MXx8fHwxNzc3NTMyOTM3fDA&ixlib=rb-4.1.0&q=80&w=1080',
+      location: 'Bandung',
+      target: 8000000,
+      collected: 6200000,
+      donors: 98,
+      daysLeft: 12,
+      category: 'UMKM Terdampak Bencana',
+      organizer: 'Komunitas Pedagang Kaki Lima Bandung',
+      story: `Pak Joko (45 tahun) adalah pedagang sate keliling yang sudah berjualan selama 20 tahun di kawasan Dago, Bandung. Sate Pak Joko terkenal enak dan selalu ramai pembeli setiap malam.
+
+Pada tanggal 20 Maret 2026, ketika Pak Joko sedang istirahat sebentar untuk sholat, gerobak satenya dicuri orang yang tidak bertanggung jawab. Gerobak tersebut berisi:
+- Kompor gas dan tabung gas
+- Alat panggang sate (3 buah)
+- Panci dan peralatan masak
+- Meja dan kursi lipat
+- Lemari es kecil
+- Persediaan bumbu dan bahan
+
+Total kerugian mencapai Rp 8.000.000. Pak Joko sudah melapor ke polisi namun gerobak belum ditemukan. Sejak kejadian itu, Pak Joko tidak bisa berjualan dan kehilangan penghasilan untuk menghidupi istri dan 3 anaknya.
+
+Dana yang terkumpul akan digunakan untuk:
+1. Gerobak sate baru - Rp 4.000.000
+2. Kompor gas dan tabung - Rp 1.500.000
+3. Alat panggang dan peralatan - Rp 1.500.000
+4. Modal bahan baku - Rp 1.000.000
+
+Mari kita bantu Pak Joko untuk bisa berjualan lagi! 🍢`,
+      fundAllocation: [
+        { name: 'Gerobak Baru', value: 4000000, color: '#10B981' },
+        { name: 'Kompor & Gas', value: 1500000, color: '#3B82F6' },
+        { name: 'Peralatan', value: 1500000, color: '#F59E0B' },
+        { name: 'Modal Bahan', value: 1000000, color: '#EF4444' }
+      ],
+      disbursementHistory: [
+        { date: '28 Mar', amount: 2500000, purpose: 'Pencairan Tahap 1: DP Gerobak' },
+        { date: '5 Apr', amount: 2200000, purpose: 'Pelunasan Gerobak & Kompor' },
+        { date: '12 Apr', amount: 1500000, purpose: 'Pembelian Peralatan' }
+      ]
+    },
+    {
+      id: 4,
+      createdAt: 1715308800000,
+      title: 'Penjahit Rumahan Ibu Ani Alat Rusak',
+      description: 'Mesin jahit yang digunakan untuk menerima orderan rusak. Butuh bantuan untuk membeli mesin jahit baru agar bisa melanjutkan usaha.',
+      fullDescription: 'Ibu Ani kehilangan sumber penghasilan karena mesin jahit rusak',
+      image: 'https://images.unsplash.com/photo-1768637758036-9a690925ae72?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw0fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      location: 'Surabaya',
+      target: 6000000,
+      collected: 3800000,
+      donors: 76,
+      daysLeft: 20,
+      category: 'UMKM Terdampak Bencana',
+      organizer: 'Yayasan UMKM Surabaya',
+      story: `Ibu Ani (38 tahun) adalah penjahit rumahan di Surabaya yang sudah menekuni profesi ini selama 12 tahun. Dari hasil jahit-menjahit, Ibu Ani bisa menghidupi kedua anaknya yang masih sekolah.
+
+Orderan jahitan Ibu Ani selalu ramai, mulai dari jahit baju, pembuatan seragam, hingga reparasi pakaian. Rata-rata penghasilan Ibu Ani mencapai Rp 3-4 juta per bulan.
+
+Namun pada bulan Maret 2026, mesin jahit Ibu Ani yang sudah berusia 15 tahun mengalami kerusakan parah:
+- Dinamo mesin mati total
+- Gear penggerak patah
+- Body mesin berkarat
+- Tidak ekonomis untuk diperbaiki
+
+Karena tidak memiliki mesin jahit, Ibu Ani terpaksa menolak semua orderan. Penghasilannya hilang dan keluarga kesulitan untuk memenuhi kebutuhan sehari-hari.
+
+Dana yang dibutuhkan:
+1. Mesin jahit portable baru - Rp 4.000.000
+2. Mesin obras - Rp 1.500.000
+3. Peralatan jahit (gunting, meteran, dll) - Rp 500.000
+
+Dengan bantuan Anda, Ibu Ani bisa kembali produktif dan menghidupi keluarganya! 🧵`,
+      fundAllocation: [
+        { name: 'Mesin Jahit', value: 4000000, color: '#10B981' },
+        { name: 'Mesin Obras', value: 1500000, color: '#3B82F6' },
+        { name: 'Peralatan', value: 500000, color: '#F59E0B' }
+      ],
+      disbursementHistory: [
+        { date: '2 Apr', amount: 2000000, purpose: 'Pencairan Tahap 1: DP Mesin Jahit' },
+        { date: '15 Apr', amount: 1800000, purpose: 'Pelunasan Mesin Jahit & DP Obras' }
+      ]
+    },
+    {
+      id: 5,
+      createdAt: 1716595200000,
+      title: 'Warung Kopi Mas Budi Terdampak Longsor',
+      description: 'Warung kopi di daerah wisata rusak akibat tanah longsor. Butuh bantuan untuk renovasi dan membeli peralatan baru.',
+      fullDescription: 'Warung kopi yang menjadi ikon kuliner lokal rusak akibat longsor',
+      image: 'https://images.unsplash.com/photo-1757763006278-d0fa5d582d0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      location: 'Bogor',
+      target: 20000000,
+      collected: 5400000,
+      donors: 52,
+      daysLeft: 30,
+      category: 'UMKM Terdampak Bencana',
+      organizer: 'Dinas Koperasi & UMKM Bogor',
+      story: `Warung Kopi "Ngopi Gunung" milik Mas Budi (42 tahun) berlokasi di kawasan wisata Puncak, Bogor. Warung ini sudah berdiri 8 tahun dan menjadi tempat favorit wisatawan untuk menikmati kopi sambil melihat pemandangan gunung.
+
+Pada tanggal 10 April 2026, hujan deras yang terjadi selama 3 hari menyebabkan tanah longsor di sekitar warung. Akibatnya:
+- Bagian belakang warung roboh
+- Mesin kopi espresso rusak terkena tanah
+- Meja dan kursi hancur
+- Kaca jendela pecah
+- Instalasi listrik rusak total
+
+Kerugian material mencapai Rp 20.000.000. Mas Budi yang juga harus menghidupi 4 orang karyawan sangat membutuhkan bantuan untuk membangun kembali warungnya.
+
+Rencana penggunaan dana:
+1. Perbaikan struktur bangunan - Rp 10.000.000
+2. Mesin kopi espresso baru - Rp 6.000.000
+3. Furniture (meja, kursi) - Rp 2.500.000
+4. Instalasi listrik & renovasi - Rp 1.500.000
+
+Bantu Mas Budi untuk membuka kembali warung kopinya! ☕`,
+      fundAllocation: [
+        { name: 'Renovasi Bangunan', value: 10000000, color: '#10B981' },
+        { name: 'Mesin Kopi', value: 6000000, color: '#3B82F6' },
+        { name: 'Furniture', value: 2500000, color: '#F59E0B' },
+        { name: 'Instalasi', value: 1500000, color: '#EF4444' }
+      ],
+      disbursementHistory: [
+        { date: '18 Apr', amount: 3000000, purpose: 'Pencairan Tahap 1: Material Renovasi' },
+        { date: '25 Apr', amount: 2400000, purpose: 'Upah Tukang & Material Tambahan' }
+      ]
+    },
+    {
+      id: 6,
+      createdAt: 1717891200000,
+      title: 'Pedagang Sayur Bu Wati Kehilangan Motor',
+      description: 'Motor yang digunakan untuk mengangkut sayuran hilang dicuri. Butuh bantuan untuk membeli motor bekas agar bisa berjualan lagi.',
+      fullDescription: 'Bu Wati kehilangan motor yang digunakan untuk berjualan sayur keliling',
+      image: 'https://images.unsplash.com/photo-1767678233351-9308d8220fa5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw1fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      location: 'Yogyakarta',
+      target: 12000000,
+      collected: 7800000,
+      donors: 112,
+      daysLeft: 15,
+      category: 'UMKM Terdampak Bencana',
+      organizer: 'Forum UMKM Yogyakarta',
+      story: `Bu Wati (48 tahun) adalah pedagang sayur keliling di Yogyakarta. Setiap pagi jam 4, Bu Wati berangkat ke pasar induk untuk membeli sayuran segar, kemudian menjualnya keliling kampung menggunakan motor bebek yang sudah dimodifikasi dengan bak besar.
+
+Pada tanggal 2 April 2026, motor Bu Wati hilang dicuri saat diparkir di pasar. Motor tersebut sudah dilengkapi dengan:
+- Bak besar untuk sayuran
+- Timbangan digital
+- Kanopi pelindung
+- Keranjang plastik (20 buah)
+
+Total nilai motor dan perlengkapan mencapai Rp 12.000.000. Sejak motor hilang, Bu Wati tidak bisa berjualan karena tidak ada kendaraan untuk mengangkut sayuran. Padahal dari jualan sayur inilah Bu Wati menghidupi dirinya dan ibu yang sudah sepuh.
+
+Dana yang dibutuhkan:
+1. Motor bebek bekas (2015-2017) - Rp 8.000.000
+2. Modifikasi bak sayuran - Rp 2.500.000
+3. Perlengkapan berjualan - Rp 1.000.000
+4. Modal sayuran - Rp 500.000
+
+Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
+      fundAllocation: [
+        { name: 'Motor Bekas', value: 8000000, color: '#10B981' },
+        { name: 'Modifikasi Bak', value: 2500000, color: '#3B82F6' },
+        { name: 'Perlengkapan', value: 1000000, color: '#F59E0B' },
+        { name: 'Modal', value: 500000, color: '#EF4444' }
+      ],
+      disbursementHistory: [
+        { date: '10 Apr', amount: 4000000, purpose: 'Pencairan Tahap 1: DP Motor' },
+        { date: '18 Apr', amount: 3800000, purpose: 'Pelunasan Motor & Modifikasi' }
+      ]
+    }
+  ]);
+
+  useEffect(() => {
+    const storedCampaigns = loadCampaignsFromStorage();
+    if (storedCampaigns && storedCampaigns.length > 0) {
+      setCampaigns(storedCampaigns);
+    }
+
+    setCampaignsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === campaignStorageKey) {
+        const storedCampaigns = loadCampaignsFromStorage();
+        if (storedCampaigns) {
+          setCampaigns(storedCampaigns);
+        }
+      }
+
+      if (event.key === adminSessionKey) {
+        setAdminUser(loadAdminSessionFromStorage());
+      }
+
+      if (event.key === registeredUsersKey) {
+        setRegisteredUsers(loadRegisteredUsersFromStorage());
+      }
+
+      if (event.key === withdrawalRequestsKey) {
+        setWithdrawalRequests(loadWithdrawalRequestsFromStorage());
+      }
+    };
+
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
+  useEffect(() => {
+    if (!rejectUndoState && !deletedUserUndoState) {
+      return;
+    }
+
+    const tickInterval = window.setInterval(() => {
+      setUndoNow(Date.now());
+    }, 250);
+
+    return () => window.clearInterval(tickInterval);
+  }, [rejectUndoState, deletedUserUndoState]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    if (!campaignsHydrated) {
+      return;
+    }
+
+    window.localStorage.setItem(campaignStorageKey, JSON.stringify(campaigns));
+  }, [campaigns, campaignsHydrated]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(withdrawalRequestsKey, JSON.stringify(withdrawalRequests));
+  }, [withdrawalRequests]);
+
+  const campaignsForDisplay = [...campaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
+
+  const baseAdminUsers: AdminUserRow[] = [
+    { id: 1, name: 'Admin Utama', email: 'admin@bantusesama.id', role: 'admin', status: 'active', campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === 'admin@bantusesama.id').length },
+    { id: 2, name: 'Dewi Prasetyo', email: 'dewi@bantusesama.id', role: 'user', status: 'active', campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === 'dewi@bantusesama.id').length },
+    { id: 3, name: 'Rizky Maulana', email: 'rizky@bantusesama.id', role: 'user', status: 'pending', campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === 'rizky@bantusesama.id').length },
+    { id: 4, name: 'Sari Wulandari', email: 'sari@bantusesama.id', role: 'user', status: 'active', campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === 'sari@bantusesama.id').length },
+  ];
+
+  const registeredUserRows: AdminUserRow[] = registeredUsers
+    .filter((account) => !baseAdminUsers.some((item) => item.email === account.email))
+    .map((account, index) => ({
+      id: 1000 + index,
+      name: account.name,
+      email: account.email,
+      role: 'user',
+      status: 'active',
+      campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === account.email).length
+    }));
+
+  const adminUsers = [...baseAdminUsers, ...registeredUserRows]
+    .filter((item) => !deletedUserEmails.includes(item.email))
+    .sort((a, b) => a.id - b.id);
+
+  const clearRejectUndoTimer = () => {
+    if (rejectUndoTimeoutRef.current) {
+      window.clearTimeout(rejectUndoTimeoutRef.current);
+      rejectUndoTimeoutRef.current = null;
+    }
+  };
+
+  const clearDeletedUserUndoTimer = () => {
+    if (deletedUserUndoTimeoutRef.current) {
+      window.clearTimeout(deletedUserUndoTimeoutRef.current);
+      deletedUserUndoTimeoutRef.current = null;
+    }
+  };
+
+  const startRejectUndo = (campaignId: number, previousStatus?: CampaignStatus) => {
+    clearRejectUndoTimer();
+
+    const expiresAt = Date.now() + 5000;
+    setRejectUndoState({ campaignId, previousStatus, expiresAt });
+    rejectUndoTimeoutRef.current = window.setTimeout(() => {
+      setRejectUndoState(null);
+      rejectUndoTimeoutRef.current = null;
+      
+      // After undo time expires, permanently remove the rejected campaign
+      setCampaigns((prev) => prev.filter((c) => c.id !== campaignId));
+    }, 5000);
+  };
+
+  const undoRejectCampaign = () => {
+    if (!rejectUndoState) {
+      return;
+    }
+
+    const { campaignId, previousStatus } = rejectUndoState;
+    setCampaigns((prev) => prev.map((campaign) => (
+      campaign.id === campaignId
+        ? { ...campaign, status: previousStatus }
+        : campaign
+    )));
+
+    clearRejectUndoTimer();
+    setRejectUndoState(null);
+  };
+
+  const startDeletedUserUndo = (email: string, userData: StoredUser | null, removedCampaigns: CampaignRecord[]) => {
+    clearDeletedUserUndoTimer();
+
+    const expiresAt = Date.now() + 5000;
+    setDeletedUserUndoState({ email, userData, removedCampaigns, expiresAt });
+    deletedUserUndoTimeoutRef.current = window.setTimeout(() => {
+      setDeletedUserUndoState(null);
+      deletedUserUndoTimeoutRef.current = null;
+    }, 5000);
+  };
+
+  const undoDeletedUser = () => {
+    if (!deletedUserUndoState) {
+      return;
+    }
+
+    if (deletedUserUndoState.userData) {
+      const nextUsers = [...registeredUsers, deletedUserUndoState.userData].filter(
+        (account, index, arr) => arr.findIndex((item) => item.email === account.email) === index
+      );
+      setRegisteredUsers(nextUsers);
+      window.localStorage.setItem(registeredUsersKey, JSON.stringify(nextUsers));
+    }
+
+    setDeletedUserEmails((prev) => prev.filter((email) => email !== deletedUserUndoState.email));
+    setCampaigns((prev) => {
+      const existingIds = new Set(prev.map((campaign) => campaign.id));
+      const restoredCampaigns = deletedUserUndoState.removedCampaigns.filter((campaign) => !existingIds.has(campaign.id));
+      return [...restoredCampaigns, ...prev];
+    });
+
+    clearDeletedUserUndoTimer();
+    setDeletedUserUndoState(null);
+  };
+
+  const createWithdrawalRequest = (campaignId: number, amount: number, note: string, requestedByName: string, requestedByEmail: string) => {
+    const campaign = campaigns.find((item) => item.id === campaignId);
+
+    if (!campaign || !Number.isFinite(amount) || amount <= 0) {
+      return;
+    }
+
+    const now = Date.now();
+    const nextRequest: WithdrawalRequest = {
+      id: now,
+      campaignId,
+      campaignTitle: campaign.title,
+      requestedByName,
+      requestedByEmail,
+      amount,
+      note,
+      status: 'Pending',
+      createdAt: now,
+      updatedAt: now
+    };
+
+    setWithdrawalRequests((prev) => [nextRequest, ...prev]);
+  };
+
+    const updateWithdrawalRequestStatus = (requestId: number, status: WithdrawalStatus) => {
+      // Get the withdrawal request before updating to check previous status
+      const withdrawal = withdrawalRequests.find((r) => r.id === requestId);
+      const previousStatus = withdrawal?.status;
+
+      setWithdrawalRequests((prev) => prev.map((request) => (
+        request.id === requestId
+          ? { ...request, status, updatedAt: Date.now() }
+          : request
+      )));
+
+      if (withdrawal) {
+        // If changing to Success, decrease collected amount
+        if (status === 'Success' && previousStatus !== 'Success') {
+          setCampaigns((prev) =>
+            prev.map((campaign) =>
+              campaign.id === withdrawal.campaignId
+                ? { ...campaign, collected: Math.max(0, campaign.collected - withdrawal.amount) }
+                : campaign
+            )
+          );
+        }
+        // If changing to Rejected from Success, return the amount
+        else if (status === 'Rejected' && previousStatus === 'Success') {
+          setCampaigns((prev) =>
+            prev.map((campaign) =>
+              campaign.id === withdrawal.campaignId
+                ? { ...campaign, collected: campaign.collected + withdrawal.amount }
+                : campaign
+            )
+          );
+        }
+      }
+    };
+
+    const clearProcessedWithdrawals = () => {
+      setWithdrawalRequests((prev) => prev.filter((r) => r.status !== 'Success' && r.status !== 'Rejected'));
+    };
+
+  // Filter & sort logic
+  let filteredCampaigns = campaignsForDisplay;
+  filteredCampaigns = filteredCampaigns.filter(campaign => campaign.status !== 'pending' && campaign.status !== 'rejected');
+  if (selectedCategory !== 'Semua Kategori') {
+    filteredCampaigns = filteredCampaigns.filter(c => c.category.includes(selectedCategory));
+  }
+  if (sortBy === 'Terbaru') {
+    filteredCampaigns = [...filteredCampaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
+  } else if (sortBy === 'Paling Mendesak') {
+    filteredCampaigns = [...filteredCampaigns].sort((a, b) => a.daysLeft - b.daysLeft);
+  } else if (sortBy === 'Hampir Tercapai') {
+    filteredCampaigns = [...filteredCampaigns].sort((a, b) => (b.collected / b.target) - (a.collected / a.target));
+  }
+
+  // handle special scroll/navigation pages
+  useEffect(() => {
+    if (page === 'cara-kerja') {
+      const el = document.getElementById('cara-kerja');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+      setPage(null);
+    }
+
+    if (page === 'kampanye') {
+      const el = document.getElementById('kampanye');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
+      setPage(null);
+    }
+
+    if (page === 'buat-kampanye') {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [page]);
+
+  const selectedCampaignData = campaigns.find(c => c.id === selectedCampaign);
+
+  useEffect(() => {
+    if (selectedCampaignData) {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  }, [selectedCampaignData]);
+
+  // Routing utama
+  if (page === 'donasi-saya') {
+    return (
+      <>
+        <Navbar onNavigate={navigatePage} onHome={goHome} user={user} onLogout={() => setUser(null)} />
+        <DonasiSaya
+          user={user}
+          onLogin={() => navigatePage('login')}
+          donations={campaigns
+            .filter((campaign) => campaign.donors > 0)
+            .map((campaign) => ({
+              id: campaign.id,
+              campaignTitle: campaign.title,
+              amount: campaign.collected,
+              date: new Date(campaign.createdAt ?? Date.now()).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
+              status: 'Sukses' as const,
+              campaignId: campaign.id
+            }))}
+        />
+        <Chatbot />
+      </>
+    );
+  }
+  if (selectedCampaignData) {
+    return (
+      <>
+        <Navbar onNavigate={navigatePage} onHome={goHome} user={user} onLogout={() => setUser(null)} />
+        <CampaignDetail
+          campaign={selectedCampaignData}
+          user={user}
+          withdrawalRequests={withdrawalRequests}
+          onBack={closeCampaign}
+          onRequestWithdrawal={(campaignId, request) => {
+            if (!user?.email) {
+              return;
+            }
+
+            createWithdrawalRequest(campaignId, request.amount, request.note, user.name, user.email);
+          }}
+          onUpdateCampaign={(campaignId, updates) => {
+            setCampaigns((prev) => prev.map((campaign) => (
+              campaign.id === campaignId ? { ...campaign, ...updates } : campaign
+            )));
+          }}
+          onDonationSuccess={(amount, donorInfo) => {
+            setCampaigns((prev) => prev.map((campaign) => (
+              campaign.id === selectedCampaignData.id
+                ? {
+                    ...campaign,
+                    collected: campaign.collected + amount,
+                    donors: campaign.donors + 1,
+                    donations: [
+                      ...(campaign.donations || []),
+                      {
+                        name: donorInfo.name,
+                        amount: amount,
+                        message: donorInfo.message,
+                        timestamp: Date.now()
+                      }
+                    ]
+                  }
+                : campaign
+            )));
+          }}
+        />
+        <Chatbot />
+      </>
+    );
+  }
+  if (page === 'login') {
+    return (
+      <>
+        <Navbar onNavigate={navigatePage} onHome={goHome} user={user} onLogout={() => setUser(null)} />
+        <LoginRegister onLogin={(u) => {
+          setUser(u);
+          setRegisteredUsers(loadRegisteredUsersFromStorage());
+          goHome();
+        }} />
+      </>
+    );
+  }
+  if (page === 'admin-login' || (page === 'admin' && !adminUser)) {
+    return (
+      <AdminLogin
+        onLogin={(admin) => {
+          setAdminUser(admin);
+          window.localStorage.setItem(adminSessionKey, JSON.stringify(admin));
+          navigatePage('admin');
+        }}
+      />
+    );
+  }
+  if (page === 'buat-kampanye') {
+    return (
+      <>
+        <Navbar onNavigate={navigatePage} onHome={goHome} user={user} onLogout={() => setUser(null)} />
+        <div className="max-w-md mx-auto py-12 px-4">
+          <h2 className="text-2xl font-bold mb-4">Buat Kampanye</h2>
+          <CreateCampaign user={user} onCreate={(c) => { setCampaigns(prev => [c, ...prev]); openCampaign(c.id); }} />
+        </div>
+      </>
+    );
+  }
+  if (page && ['tentang-kami', 'syarat-ketentuan', 'kebijakan-privasi', 'faq', 'hubungi-kami', 'panduan-donatur', 'panduan-penggalang'].includes(page)) {
+    return <InfoPage page={page as InfoPageKey} onNavigate={navigatePage} onHome={goHome} />;
+  }
+  if (page === 'panel') {
+    const userCampaigns = user?.email ? campaigns.filter((campaign) => campaign.creatorEmail === user.email) : [];
+
+    return (
+      <>
+        <Navbar onNavigate={navigatePage} onHome={goHome} user={user} onLogout={() => setUser(null)} />
+        <div className="max-w-4xl mx-auto py-12 px-4">
+          <h2 className="text-2xl font-bold mb-4">Panel User</h2>
+          {user ? (
+            <div className="space-y-6">
+              <p>Selamat datang, {user.name}</p>
+              <button onClick={() => navigatePage('donasi-saya')} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">Lihat Donasi Saya</button>
+              <div className="rounded-xl border border-gray-200 bg-white p-6">
+                <h3 className="text-lg font-semibold text-gray-900 mb-4">Kampanye Saya</h3>
+                {userCampaigns.length === 0 ? (
+                  <p className="text-gray-600">Belum ada kampanye yang dibuat.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {userCampaigns.map((campaign) => (
+                      <div key={campaign.id} className="flex items-center justify-between gap-3 rounded-lg border border-gray-200 p-4">
+                        <div>
+                          <p className="font-medium text-gray-900">{campaign.title}</p>
+                          <p className="text-sm text-gray-600">Deadline {campaign.daysLeft} hari lagi</p>
+                        </div>
+                        <button onClick={() => openCampaign(campaign.id)} className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700">
+                          Buka & Edit
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : (
+            <p>Silakan login terlebih dahulu.</p>
+          )}
+        </div>
+      </>
+    );
+  }
+  if (page === 'admin') {
+    return (
+      <>
+        {rejectUndoState && (
+          <div className="fixed top-20 left-0 right-0 z-50 mx-auto px-4 sm:px-6 lg:px-8 flex justify-center">
+            <div className="max-w-7xl w-full rounded-xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 flex items-center justify-between gap-3">
+              <span>
+                Kampanye ditolak. Undo tersedia {Math.max(0, Math.ceil((rejectUndoState.expiresAt - undoNow) / 1000))} detik.
+              </span>
+              <button
+                onClick={undoRejectCampaign}
+                className="px-3 py-1 rounded-lg bg-amber-600 text-white hover:bg-amber-700"
+              >
+                Undo
+              </button>
+            </div>
+          </div>
+        )}
+        {deletedUserUndoState && (
+          <div className="fixed top-20 left-0 right-0 z-50 mx-auto px-4 sm:px-6 lg:px-8 flex justify-center">
+            <div className="max-w-7xl w-full rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-rose-900 flex items-center justify-between gap-3">
+              <span>
+                User {deletedUserUndoState.email} dihapus. Undo tersedia {Math.max(0, Math.ceil((deletedUserUndoState.expiresAt - undoNow) / 1000))} detik.
+              </span>
+              <button
+                onClick={undoDeletedUser}
+                className="px-3 py-1 rounded-lg bg-rose-600 text-white hover:bg-rose-700"
+              >
+                Undo
+              </button>
+            </div>
+          </div>
+        )}
+        <AdminDashboard
+          campaigns={campaignsForDisplay}
+          users={adminUsers}
+          withdrawalRequests={withdrawalRequests}
+          user={adminUser}
+          onVerifyCampaign={(campaignId) => {
+            clearRejectUndoTimer();
+            setRejectUndoState(null);
+            setCampaigns((prev) => prev.map((campaign) => (
+              campaign.id === campaignId ? { ...campaign, status: 'verified' } : campaign
+            )));
+          }}
+          onRejectCampaign={(campaignId) => {
+            const previousStatus = campaigns.find((campaign) => campaign.id === campaignId)?.status;
+            setCampaigns((prev) => prev.map((campaign) => (
+              campaign.id === campaignId ? { ...campaign, status: 'rejected' } : campaign
+            )));
+            startRejectUndo(campaignId, previousStatus);
+          }}
+          onUpdateWithdrawalStatus={updateWithdrawalRequestStatus}
+          onClearWithdrawals={clearProcessedWithdrawals}
+          onLogout={() => {
+            setAdminUser(null);
+            window.localStorage.removeItem(adminSessionKey);
+            navigatePage('admin-login');
+          }}
+          onDeleteUser={(email) => {
+            const deletedUser = registeredUsers.find((account) => account.email === email) ?? null;
+            const removedCampaigns = campaigns.filter((campaign) => campaign.creatorEmail === email);
+            const filteredUsers = registeredUsers.filter((account) => account.email !== email);
+            setRegisteredUsers(filteredUsers);
+            window.localStorage.setItem(registeredUsersKey, JSON.stringify(filteredUsers));
+            setDeletedUserEmails((prev) => (prev.includes(email) ? prev : [...prev, email]));
+            setCampaigns((prev) => prev.filter((campaign) => campaign.creatorEmail !== email));
+            startDeletedUserUndo(email, deletedUser, removedCampaigns);
+          }}
+        />
+      </>
+    );
+  }
+  return (
+    <div className="min-h-screen bg-gray-50">
+      <Navbar onNavigate={navigatePage} onHome={goHome} user={user} onLogout={() => setUser(null)} />
+
+      <section className="relative bg-gradient-to-br from-blue-600 to-blue-700 text-white py-20 overflow-hidden">
+        <div className="absolute inset-0 opacity-20">
+          <img
+            src="https://images.unsplash.com/photo-1559027615-cd4628902d4a?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=1920"
+            alt="Community helping"
+            className="w-full h-full object-cover"
+          />
+        </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid md:grid-cols-2 gap-12 items-center mb-16">
+            <div>
+              <h1 className="font-bold text-4xl md:text-5xl mb-6">
+                Bantu UMKM Bangkit dari Bencana
+              </h1>
+              <p className="text-xl text-blue-50 mb-8">
+                Platform crowdfunding dengan transparansi penuh untuk membantu UMKM yang terdampak bencana
+              </p>
+              <div className="flex flex-wrap gap-4">
+                <button onClick={() => navigatePage('kampanye')} className="px-8 py-3 bg-white text-blue-600 rounded-lg hover:bg-blue-50 font-medium">
+                  Mulai Donasi
+                </button>
+                <button onClick={() => navigatePage('buat-kampanye')} className="px-8 py-3 border-2 border-white text-white rounded-lg hover:bg-white hover:text-blue-600 font-medium">
+                  Buat Kampanye
+                </button>
+              </div>
+            </div>
+            <div className="hidden md:block">
+              <img
+                src="https://images.unsplash.com/photo-1593113598332-cd288d649433?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&q=80&w=800"
+                alt="Helping hands"
+                className="rounded-2xl shadow-2xl"
+              />
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 text-center">
+              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <TrendingUp className="w-6 h-6" />
+              </div>
+              <h3 className="font-semibold text-lg mb-2">Rp 125 Juta+</h3>
+              <p className="text-blue-50">Total Dana Terkumpul</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 text-center">
+              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Users className="w-6 h-6" />
+              </div>
+              <h3 className="font-semibold text-lg mb-2">1,250+ Donatur</h3>
+              <p className="text-blue-50">Orang Sudah Berdonasi</p>
+            </div>
+            <div className="bg-white/10 backdrop-blur-sm rounded-xl p-6 text-center">
+              <div className="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center mx-auto mb-4">
+                <Heart className="w-6 h-6" />
+              </div>
+              <h3 className="font-semibold text-lg mb-2">95 UMKM</h3>
+              <p className="text-blue-50">Telah Terbantu</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="kampanye" className="py-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="flex justify-between items-center mb-8">
+            <div>
+              <h2 className="font-bold text-3xl text-gray-900 mb-2">Kampanye Mendesak</h2>
+              <p className="text-gray-600">UMKM yang membutuhkan bantuan Anda segera</p>
+            </div>
+            <div className="flex gap-2">
+              <select
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                value={selectedCategory}
+                onChange={e => setSelectedCategory(e.target.value)}
+              >
+                <option>Semua Kategori</option>
+                <option>UMKM Terdampak Bencana</option>
+                <option>Kesehatan</option>
+                <option>Pendidikan</option>
+                <option>Kemanusiaan</option>
+              </select>
+              <select
+                className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                value={sortBy}
+                onChange={e => setSortBy(e.target.value)}
+              >
+                <option>Terbaru</option>
+                <option>Paling Mendesak</option>
+                <option>Hampir Tercapai</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredCampaigns.map((campaign) => (
+              <CampaignCard
+                key={campaign.id}
+                {...campaign}
+                onClick={() => openCampaign(campaign.id)}
+              />
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <section className="bg-blue-50 py-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="font-bold text-3xl text-gray-900 mb-4">Mengapa BantuSesama?</h2>
+            <p className="text-gray-600">Kepercayaan adalah prioritas kami</p>
+          </div>
+
+          <div className="grid md:grid-cols-3 gap-8">
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                <Shield className="w-6 h-6 text-blue-600" />
+              </div>
+              <h3 className="font-semibold text-xl mb-3 text-gray-900">100% Transparan</h3>
+              <p className="text-gray-600">
+                Setiap rupiah yang masuk dan keluar tercatat dengan jelas. Lihat laporan penggunaan dana secara real-time.
+              </p>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                <Users className="w-6 h-6 text-blue-600" />
+              </div>
+              <h3 className="font-semibold text-xl mb-3 text-gray-900">Terverifikasi</h3>
+              <p className="text-gray-600">
+                Semua kampanye diverifikasi tim kami. Kami memastikan dana sampai ke tangan yang tepat.
+              </p>
+            </div>
+            <div className="bg-white p-6 rounded-xl shadow-sm">
+              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center mb-4">
+                <Heart className="w-6 h-6 text-blue-600" />
+              </div>
+              <h3 className="font-semibold text-xl mb-3 text-gray-900">Donasi Rutin</h3>
+              <p className="text-gray-600">
+                Aktifkan donasi rutin bulanan untuk membantu UMKM secara berkelanjutan dan otomatis.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section id="cara-kerja" className="py-16">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="text-center mb-12">
+            <h2 className="font-bold text-3xl text-gray-900 mb-4">Cara Kerja</h2>
+            <p className="text-gray-600">Mudah dan cepat untuk membantu sesama</p>
+          </div>
+
+          <div className="grid md:grid-cols-4 gap-6">
+            {[
+              { step: '1', title: 'Pilih Kampanye', desc: 'Browse kampanye UMKM yang membutuhkan bantuan' },
+              { step: '2', title: 'Tentukan Nominal', desc: 'Pilih jumlah donasi yang ingin diberikan' },
+              { step: '3', title: 'Bayar Aman', desc: 'Gunakan payment gateway terpercaya' },
+              { step: '4', title: 'Pantau Transparansi', desc: 'Lihat laporan penggunaan dana secara real-time' }
+            ].map((item, idx) => (
+              <div key={idx} className="text-center">
+                <div className="w-16 h-16 bg-blue-600 text-white rounded-full flex items-center justify-center text-2xl font-bold mx-auto mb-4">
+                  {item.step}
+                </div>
+                <h3 className="font-semibold text-lg mb-2 text-gray-900">{item.title}</h3>
+                <p className="text-gray-600 text-sm">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      <footer className="bg-gray-900 text-white py-12">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+          <div className="grid md:grid-cols-4 gap-8">
+            <div>
+              <div className="flex items-center gap-2 mb-4">
+                <svg width="32" height="32" viewBox="0 0 40 40" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="20" cy="20" r="20" fill="#3B82F6"/>
+                  <path d="M20 8L12 16H16V24H14L20 32L26 24H24V16H28L20 8Z" fill="white"/>
+                  <circle cx="20" cy="20" r="3" fill="#FCD34D"/>
+                </svg>
+                <span className="font-bold text-xl">BantuSesama</span>
+              </div>
+              <p className="text-gray-400 text-sm">
+                Platform crowdfunding dengan transparansi penuh untuk UMKM terdampak bencana
+              </p>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-4">Tentang</h4>
+              <ul className="space-y-2 text-gray-400 text-sm">
+                <li><button type="button" className="hover:text-white" onClick={() => navigatePage('tentang-kami')}>Tentang Kami</button></li>
+                <li><button type="button" className="hover:text-white" onClick={() => navigatePage('syarat-ketentuan')}>Syarat & Ketentuan</button></li>
+                <li><button type="button" className="hover:text-white" onClick={() => navigatePage('kebijakan-privasi')}>Kebijakan Privasi</button></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-4">Bantuan</h4>
+              <ul className="space-y-2 text-gray-400 text-sm">
+                <li><button type="button" className="hover:text-white" onClick={() => navigatePage('faq')}>FAQ</button></li>
+                <li><button type="button" className="hover:text-white" onClick={() => navigatePage('hubungi-kami')}>Hubungi Kami</button></li>
+                <li><button type="button" className="hover:text-white" onClick={() => navigatePage('panduan-donatur')}>Panduan Donatur</button></li>
+                <li><button type="button" className="hover:text-white" onClick={() => navigatePage('panduan-penggalang')}>Panduan Penggalang</button></li>
+              </ul>
+            </div>
+            <div>
+              <h4 className="font-semibold mb-4">Kontak</h4>
+              <ul className="space-y-2 text-gray-400 text-sm">
+                <li>Email: info@bantusesama.id</li>
+                <li>Telepon: (021) 1234-5678</li>
+                <li>WhatsApp: 0812-3456-7890</li>
+              </ul>
+            </div>
+          </div>
+          <div className="border-t border-gray-800 mt-8 pt-8 text-center text-gray-400 text-sm">
+            <p>&copy; 2026 BantuSesama. Semua hak dilindungi.</p>
+          </div>
+        </div>
+      </footer>
+
+      <Chatbot />
+      {/* Dokumentasi component removed */}
+    </div>
+  );
+}
