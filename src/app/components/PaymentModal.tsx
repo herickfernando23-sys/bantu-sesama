@@ -472,101 +472,41 @@ export function PaymentModal({
               </div>
 
               <div className="mb-6">
-                <h3 className="text-lg font-semibold text-slate-900 mb-4">Pilih Metode Pembayaran</h3>
-                
-                {isDemoPaymentMode ? (
-                  <div className="space-y-2">
-                    {/* E-Wallet Section */}
-                    <label className={`p-4 border-2 rounded-xl cursor-pointer transition ${paymentMethod === 'ewallet' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                      <div className="flex items-start gap-3">
-                        <input type="radio" name="method" value="ewallet" checked={paymentMethod === 'ewallet'} onChange={() => setPaymentMethod('ewallet')} className="mt-1 w-4 h-4 text-blue-600" />
-                        <div>
-                          <div className="font-semibold text-slate-900">E-Wallet</div>
-                          <div className="text-sm text-slate-500">GoPay, OVO, DANA, ShopeePay</div>
-                        </div>
-                      </div>
-                    </label>
+                <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-900 mb-4">Pilih Metode Pembayaran</h3>
 
-                    {/* Virtual Account Section */}
-                    <label className={`p-4 border-2 rounded-xl cursor-pointer transition ${paymentMethod === 'virtual_account' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                      <div className="flex items-start gap-3">
-                        <input type="radio" name="method" value="virtual_account" checked={paymentMethod === 'virtual_account'} onChange={() => setPaymentMethod('virtual_account')} className="mt-1 w-4 h-4 text-blue-600" />
-                        <div>
-                          <div className="font-semibold text-slate-900">Virtual Account</div>
-                          <div className="text-sm text-slate-500">BCA, Mandiri, BNI, BRI</div>
-                        </div>
-                      </div>
-                    </label>
+                <div className="space-y-3">
+                  <label className={`flex w-full items-center gap-4 rounded-xl border px-4 py-4 cursor-pointer transition-all ${paymentMethod === 'ewallet' ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}>
+                    <input type="radio" name="method" value="ewallet" checked={paymentMethod === 'ewallet'} onChange={() => setPaymentMethod('ewallet')} className="h-4 w-4 shrink-0 accent-blue-600" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-base font-semibold text-slate-900">E-Wallet</div>
+                      <div className="mt-0.5 text-sm text-slate-500">GoPay, OVO, DANA, ShopeePay</div>
+                    </div>
+                  </label>
 
-                    {/* Bank Transfer */}
-                    <label className={`p-4 border-2 rounded-xl cursor-pointer transition ${paymentMethod === 'bank_transfer' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                      <div className="flex items-start gap-3">
-                        <input type="radio" name="method" value="bank_transfer" checked={paymentMethod === 'bank_transfer'} onChange={() => setPaymentMethod('bank_transfer')} className="mt-1 w-4 h-4 text-blue-600" />
-                        <div>
-                          <div className="font-semibold text-slate-900">Bank Transfer</div>
-                          <div className="text-sm text-slate-500">Transfer langsung dari rekening bank</div>
-                        </div>
-                      </div>
-                    </label>
+                  <label className={`flex w-full items-center gap-4 rounded-xl border px-4 py-4 cursor-pointer transition-all ${paymentMethod === 'virtual_account' ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}>
+                    <input type="radio" name="method" value="virtual_account" checked={paymentMethod === 'virtual_account'} onChange={() => setPaymentMethod('virtual_account')} className="h-4 w-4 shrink-0 accent-blue-600" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-base font-semibold text-slate-900">Virtual Account</div>
+                      <div className="mt-0.5 text-sm text-slate-500">BCA, Mandiri, BNI, BRI</div>
+                    </div>
+                  </label>
 
-                    {/* Card */}
-                    <label className={`p-4 border-2 rounded-xl cursor-pointer transition ${paymentMethod === 'card' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                      <div className="flex items-start gap-3">
-                        <input type="radio" name="method" value="card" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} className="mt-1 w-4 h-4 text-blue-600" />
-                        <div>
-                          <div className="font-semibold text-slate-900">Kartu Kredit/Debit</div>
-                          <div className="text-sm text-slate-500">Visa, Mastercard, dan sejenisnya</div>
-                        </div>
-                      </div>
-                    </label>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    {/* E-Wallet Section */}
-                    <label className={`p-4 border-2 rounded-xl cursor-pointer transition ${paymentMethod === 'ewallet' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                      <div className="flex items-start gap-3">
-                        <input type="radio" name="method" value="ewallet" checked={paymentMethod === 'ewallet'} onChange={() => setPaymentMethod('ewallet')} className="mt-1 w-4 h-4 text-blue-600" />
-                        <div>
-                          <div className="font-semibold text-slate-900">E-Wallet</div>
-                          <div className="text-sm text-slate-500">GoPay, OVO, DANA, ShopeePay</div>
-                        </div>
-                      </div>
-                    </label>
+                  <label className={`flex w-full items-center gap-4 rounded-xl border px-4 py-4 cursor-pointer transition-all ${paymentMethod === 'bank_transfer' ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}>
+                    <input type="radio" name="method" value="bank_transfer" checked={paymentMethod === 'bank_transfer'} onChange={() => setPaymentMethod('bank_transfer')} className="h-4 w-4 shrink-0 accent-blue-600" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-base font-semibold text-slate-900">Bank Transfer</div>
+                      <div className="mt-0.5 text-sm text-slate-500">Transfer langsung dari rekening bank</div>
+                    </div>
+                  </label>
 
-                    {/* Virtual Account Section */}
-                    <label className={`p-4 border-2 rounded-xl cursor-pointer transition ${paymentMethod === 'virtual_account' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                      <div className="flex items-start gap-3">
-                        <input type="radio" name="method" value="virtual_account" checked={paymentMethod === 'virtual_account'} onChange={() => setPaymentMethod('virtual_account')} className="mt-1 w-4 h-4 text-blue-600" />
-                        <div>
-                          <div className="font-semibold text-slate-900">Virtual Account</div>
-                          <div className="text-sm text-slate-500">BCA, Mandiri, BNI, BRI</div>
-                        </div>
-                      </div>
-                    </label>
-
-                    {/* Bank Transfer */}
-                    <label className={`p-4 border-2 rounded-xl cursor-pointer transition ${paymentMethod === 'bank_transfer' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                      <div className="flex items-start gap-3">
-                        <input type="radio" name="method" value="bank_transfer" checked={paymentMethod === 'bank_transfer'} onChange={() => setPaymentMethod('bank_transfer')} className="mt-1 w-4 h-4 text-blue-600" />
-                        <div>
-                          <div className="font-semibold text-slate-900">Bank Transfer</div>
-                          <div className="text-sm text-slate-500">Transfer langsung dari rekening bank</div>
-                        </div>
-                      </div>
-                    </label>
-
-                    {/* Card */}
-                    <label className={`p-4 border-2 rounded-xl cursor-pointer transition ${paymentMethod === 'card' ? 'border-blue-600 bg-blue-50' : 'border-slate-200 bg-white hover:border-slate-300'}`}>
-                      <div className="flex items-start gap-3">
-                        <input type="radio" name="method" value="card" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} className="mt-1 w-4 h-4 text-blue-600" />
-                        <div>
-                          <div className="font-semibold text-slate-900">Kartu Kredit/Debit</div>
-                          <div className="text-sm text-slate-500">Visa, Mastercard, dan sejenisnya</div>
-                        </div>
-                      </div>
-                    </label>
-                  </div>
-                )}
+                  <label className={`flex w-full items-center gap-4 rounded-xl border px-4 py-4 cursor-pointer transition-all ${paymentMethod === 'card' ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}>
+                    <input type="radio" name="method" value="card" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} className="h-4 w-4 shrink-0 accent-blue-600" />
+                    <div className="min-w-0 flex-1">
+                      <div className="text-base font-semibold text-slate-900">Kartu Kredit/Debit</div>
+                      <div className="mt-0.5 text-sm text-slate-500">Visa, Mastercard, dan sejenisnya</div>
+                    </div>
+                  </label>
+                </div>
               </div>
 
               {!isDemoPaymentMode && (
