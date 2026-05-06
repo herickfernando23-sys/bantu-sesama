@@ -48,10 +48,25 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
       return res.status(404).json({ error: 'Campaign not found' });
     }
 
+    // Some existing DB schemas may still enforce NOT NULL for userId.
+    // Ensure a user record exists for donor email when session user is not present.
+    let userId = req.user?.id || null;
+    if (!userId) {
+      let donorUser = await User.findOne({ where: { email: donorEmail } });
+      if (!donorUser) {
+        donorUser = await User.create({
+          name: donorName || 'Donor',
+          email: donorEmail,
+          password: `donor_${Date.now()}`
+        });
+      }
+      userId = donorUser.id;
+    }
+
     // Create donation record first
     const donation = await Donation.create({
       campaignId,
-      userId: req.user?.id || null,
+      userId,
       amount: Number(amount),
       currency: 'IDR',
       paymentStatus: 'pending',
@@ -131,16 +146,17 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
     // Create Midtrans transaction
     const transaction = await snap.createTransaction(parameter);
     const transactionToken = transaction.token;
+    const orderId = `ORDER-${donation.id}`;
 
-    // Store Midtrans transaction ID
-    donation.midtransTransactionId = transaction.transactions[0]?.id || transaction.id;
+    // Midtrans status API accepts order_id; keep this stable for verification.
+    donation.midtransTransactionId = orderId;
     await donation.save();
 
     res.json({
       transactionToken,
       transactionId: donation.midtransTransactionId,
       donationId: donation.id,
-      orderId: `ORDER-${donation.id}`,
+      orderId,
       amount,
       demoMode: false
     });

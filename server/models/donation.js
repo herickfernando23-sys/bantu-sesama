@@ -46,6 +46,10 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING, 
       allowNull: true 
     },
+    midtransTransactionId: {
+      type: DataTypes.STRING,
+      allowNull: true
+    },
     donorName: { 
       type: DataTypes.STRING, 
       allowNull: true 
@@ -75,7 +79,8 @@ module.exports = (sequelize) => {
     indexes: [
       { fields: ['campaignId', 'paymentStatus'] },
       { fields: ['userId'] },
-      { fields: ['stripePaymentIntentId'] }
+      { fields: ['stripePaymentIntentId'] },
+      { fields: ['midtransTransactionId'] }
     ]
   });
 };
