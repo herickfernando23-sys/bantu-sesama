@@ -20,6 +20,7 @@ const isDemoPaymentMode = String(process.env.PAYMENT_DEMO || '').toLowerCase() =
  */
 router.post('/create-intent', optionalAuth, async (req, res) => {
   try {
+    console.log('[Midtrans] create-intent payload:', req.body);
     const {
       amount,
       campaignId,
@@ -31,7 +32,7 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
       paymentMethod = 'bank_transfer'
     } = req.body;
 
-    // Validation
+    // Basic validation
     if (!donorName || !donorName.trim()) {
       return res.status(400).json({ error: 'Nama donor harus diisi' });
     }
@@ -42,11 +43,16 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
       return res.status(400).json({ error: 'Nominal donasi minimal Rp 10.000' });
     }
 
+    if (!campaignId) {
+      return res.status(400).json({ error: 'Campaign ID harus disertakan' });
+    }
+
     // Validate campaign exists
     const campaign = await Campaign.findByPk(campaignId);
     if (!campaign) {
       return res.status(404).json({ error: 'Campaign not found' });
     }
+    console.log('[Midtrans] create-intent campaign:', { id: campaign.id, title: campaign.title });
 
     // Create donation record first
     const donation = await Donation.create({
@@ -75,9 +81,10 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
     }
 
     // Midtrans transaction parameters
+    const numericAmount = Math.round(Number(amount));
     const transactionDetails = {
       order_id: `ORDER-${donation.id}`,
-      gross_amount: Number(amount)
+      gross_amount: numericAmount
     };
 
     const customerDetails = {
@@ -87,32 +94,57 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
       phone: '08111111111' // Placeholder
     };
 
+    // Build item details and ensure Midtrans constraints:
+    // - item name should be <= 50 chars
+    // - gross_amount must equal sum(price * quantity)
+    const rawItemName = `Donasi untuk ${campaign.title}`;
+    const itemName = rawItemName.length > 50 ? rawItemName.slice(0, 50) : rawItemName;
     const itemDetails = [
       {
         id: `campaign_${campaignId}`,
-        price: Number(amount),
+        price: numericAmount,
         quantity: 1,
-        name: `Donasi untuk ${campaign.title}`
+        name: itemName
       }
     ];
 
+    // Sum check (defensive)
+    const sumItems = itemDetails.reduce((s, it) => s + (Number(it.price) * Number(it.quantity)), 0);
+    if (sumItems !== transactionDetails.gross_amount) {
+      // Fix by setting gross_amount to sumItems (Midtrans requires they match)
+      transactionDetails.gross_amount = sumItems;
+    }
+
     // Payment method specific configuration
     let enabledPayments = [];
+    let paymentConfig = {};
+
     switch (paymentMethod) {
       case 'bank_transfer':
         enabledPayments = ['bank_transfer'];
+        paymentConfig = {
+          bank_transfer: {
+            bank_list: ['bca', 'bni', 'bri', 'mandiri']
+          }
+        };
         break;
       case 'virtual_account':
-        enabledPayments = ['gopay', 'ovo', 'linkaja'];
+        // Use explicit VA payment codes so Snap shows bank VA options
+        enabledPayments = ['bca_va', 'bni_va', 'bri_va', 'permata_va', 'mandiri_bill'];
+        paymentConfig = {};
         break;
       case 'card':
         enabledPayments = ['credit_card'];
+        paymentConfig = {};
         break;
       case 'ewallet':
-        enabledPayments = ['gopay', 'ovo', 'linkaja', 'dana'];
+        // E-wallet options
+        enabledPayments = ['gopay', 'shopeepay', 'ovo', 'dana'];
+        paymentConfig = {};
         break;
       default:
         enabledPayments = ['bank_transfer', 'gopay', 'ovo', 'linkaja', 'credit_card'];
+        paymentConfig = {};
     }
 
     const parameter = {
@@ -120,13 +152,23 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
       customer_details: customerDetails,
       item_details: itemDetails,
       enabled_payments: enabledPayments,
-      vt_target_bank: paymentMethod === 'bank_transfer' ? 'bca' : undefined,
+      payment: paymentConfig,
       custom_field1: `Donor: ${isAnonymous ? 'Anonymous' : donorName}`,
       custom_field2: `Campaign ID: ${campaignId}`
     };
 
-    // Remove undefined fields
-    Object.keys(parameter).forEach(key => parameter[key] === undefined && delete parameter[key]);
+    // Remove undefined/empty fields
+    Object.keys(parameter).forEach(key => {
+      if (parameter[key] === undefined || (typeof parameter[key] === 'object' && Object.keys(parameter[key]).length === 0)) {
+        delete parameter[key];
+      }
+    });
+
+    console.log('[Midtrans] Creating transaction with:', {
+      paymentMethod,
+      enabledPayments,
+      paymentConfigKeys: Object.keys(paymentConfig)
+    });
 
     // Create Midtrans transaction
     const transaction = await snap.createTransaction(parameter);
@@ -331,3 +373,43 @@ router.post('/webhook', async (req, res) => {
 });
 
 module.exports = router;
+
+/**
+ * POST /api/payments/cancel
+ * Cancel a pending donation (calls Midtrans cancel if possible and updates DB)
+ */
+router.post('/cancel', optionalAuth, async (req, res) => {
+  try {
+    const { donationId } = req.body;
+
+    if (!donationId) {
+      return res.status(400).json({ error: 'Donation ID required' });
+    }
+
+    const donation = await Donation.findByPk(donationId);
+    if (!donation) {
+      return res.status(404).json({ error: 'Donation not found' });
+    }
+
+    if (!donation.midtransTransactionId) {
+      // Nothing to cancel on Midtrans; mark failed
+      donation.paymentStatus = 'failed';
+      await donation.save();
+      return res.json({ success: true, message: 'Donation marked as cancelled' });
+    }
+
+    try {
+      await snap.transaction.cancel(donation.midtransTransactionId);
+      donation.paymentStatus = 'failed';
+      await donation.save();
+      return res.json({ success: true, message: 'Transaction cancelled' });
+    } catch (err) {
+      console.error('Midtrans cancel error:', err);
+      return res.status(500).json({ error: 'Failed to cancel transaction' });
+    }
+
+  } catch (error) {
+    console.error('Cancel payment error:', error);
+    res.status(500).json({ error: error.message || 'Failed to cancel payment' });
+  }
+});

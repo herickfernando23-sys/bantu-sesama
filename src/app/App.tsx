@@ -7,6 +7,7 @@ import { CreateCampaign } from './components/CreateCampaign';
 import { LoginRegister } from './components/LoginRegister';
 import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
+import { ContinuePaymentPage } from './components/ContinuePaymentPage';
 import { Chatbot } from './components/Chatbot';
 import { TrendingUp, Shield, Users, Heart } from 'lucide-react';
 
@@ -27,6 +28,7 @@ type Page =
   | 'hubungi-kami'
   | 'panduan-donatur'
   | 'panduan-penggalang'
+  | 'lanjut-pembayaran'
   | null;
 
 type CampaignStatus = 'verified' | 'pending' | 'rejected';
@@ -88,10 +90,23 @@ type StoredUser = {
   password: string;
 };
 
+type PendingPaymentRecord = {
+  donationId: number;
+  orderId: string;
+  campaignTitle: string;
+  amount: number;
+  method: 'virtual_account' | 'ewallet';
+  redirectUrl?: string;
+  ownerEmail?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
 const campaignStorageKey = 'bantusesama-campaigns';
 const registeredUsersKey = 'bantusesama-registered-users';
 const adminSessionKey = 'bantusesama-admin-session';
 const withdrawalRequestsKey = 'bantusesama-withdrawal-requests';
+const pendingPaymentsKey = 'bantusesama-pending-payments';
 
 const loadRegisteredUsersFromStorage = () => {
   if (typeof window === 'undefined') {
@@ -132,6 +147,46 @@ const loadWithdrawalRequestsFromStorage = () => {
   } catch {
     return [] as WithdrawalRequest[];
   }
+};
+
+const loadPendingPaymentsFromStorage = () => {
+  if (typeof window === 'undefined') {
+    return [] as PendingPaymentRecord[];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(pendingPaymentsKey);
+    const parsed = raw ? (JSON.parse(raw) as PendingPaymentRecord[]) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [] as PendingPaymentRecord[];
+  }
+};
+
+const buildCampaignFingerprint = (campaign: CampaignRecord) => [
+  campaign.title.trim().toLowerCase(),
+  campaign.description.trim().toLowerCase(),
+  campaign.location.trim().toLowerCase(),
+  String(campaign.target),
+  (campaign.creatorEmail || '').trim().toLowerCase(),
+  (campaign.organizer || '').trim().toLowerCase(),
+  campaign.category.trim().toLowerCase(),
+].join('|');
+
+const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
+  const seenIds = new Set<number>();
+  const seenFingerprints = new Set<string>();
+
+  return campaigns.filter((campaign) => {
+    const fingerprint = buildCampaignFingerprint(campaign);
+    if (seenIds.has(campaign.id) || seenFingerprints.has(fingerprint)) {
+      return false;
+    }
+
+    seenIds.add(campaign.id);
+    seenFingerprints.add(fingerprint);
+    return true;
+  });
 };
 
 type InfoPageKey = Exclude<Page, 'kampanye' | 'donasi-saya' | 'cara-kerja' | 'login' | 'buat-kampanye' | 'panel' | 'admin' | 'admin-login' | 'home' | null>;
@@ -258,10 +313,13 @@ export default function App() {
   const [registeredUsers, setRegisteredUsers] = useState<StoredUser[]>(() => loadRegisteredUsersFromStorage());
   const [deletedUserEmails, setDeletedUserEmails] = useState<string[]>([]);
   const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>(() => loadWithdrawalRequestsFromStorage());
+  const [pendingPayments, setPendingPayments] = useState<PendingPaymentRecord[]>(() => loadPendingPaymentsFromStorage());
   const [rejectUndoState, setRejectUndoState] = useState<{ campaignId: number; previousStatus?: CampaignStatus; expiresAt: number } | null>(null);
   const [deletedUserUndoState, setDeletedUserUndoState] = useState<{ email: string; userData: StoredUser | null; removedCampaigns: CampaignRecord[]; expiresAt: number } | null>(null);
   const [undoNow, setUndoNow] = useState(Date.now());
   const [campaignsHydrated, setCampaignsHydrated] = useState(false);
+  const [profileEditName, setProfileEditName] = useState('');
+  const [profileEditMessage, setProfileEditMessage] = useState('');
   const rejectUndoTimeoutRef = useRef<number | null>(null);
   const deletedUserUndoTimeoutRef = useRef<number | null>(null);
 
@@ -295,10 +353,54 @@ export default function App() {
     return Number.isFinite(parsedCampaignId) ? parsedCampaignId : null;
   };
 
+  const getPaymentContinueFromUrl = () => {
+    const paymentParam = new URLSearchParams(window.location.search).get('payment');
+    return paymentParam === 'continue';
+  };
+
+  const updateCurrentUserName = (nextName: string) => {
+    const trimmedName = nextName.trim();
+    if (!user?.email || !trimmedName) {
+      return false;
+    }
+
+    const nextRegisteredUsers = loadRegisteredUsersFromStorage().map((account) => (
+      account.email === user.email ? { ...account, name: trimmedName } : account
+    ));
+
+    setRegisteredUsers(nextRegisteredUsers);
+    window.localStorage.setItem(registeredUsersKey, JSON.stringify(nextRegisteredUsers));
+    setUser((currentUser) => (currentUser ? { ...currentUser, name: trimmedName } : currentUser));
+    setProfileEditName(trimmedName);
+    setProfileEditMessage('Nama akun berhasil diperbarui.');
+    return true;
+  };
+
+  const openPendingPayment = (payment: PendingPaymentRecord) => {
+    const params = new URLSearchParams({
+      payment: 'continue',
+      donationId: String(payment.donationId || ''),
+      orderId: String(payment.orderId || ''),
+      method: payment.method || 'ewallet',
+      campaignTitle: payment.campaignTitle || '',
+      amount: String(payment.amount || '')
+    });
+
+    if (payment.redirectUrl) {
+      params.set('redirectUrl', payment.redirectUrl);
+    }
+
+    setSelectedCampaign(null);
+    // Push history first, then change page to ensure URL is available when component mounts
+    window.history.pushState({ view: 'payment-continue' }, '', `/?${params.toString()}`);
+    setPage('lanjut-pembayaran');
+  };
+
   useEffect(() => {
     const syncFromHistory = () => {
       const state = window.history.state as { view?: string; campaignId?: number } | null;
       const campaignIdFromUrl = getCampaignIdFromUrl();
+      const paymentContinueFromUrl = getPaymentContinueFromUrl();
 
       if (state?.view === 'campaign' && typeof state.campaignId === 'number') {
         setSelectedCampaign(state.campaignId);
@@ -313,17 +415,31 @@ export default function App() {
         return;
       }
 
+      if (paymentContinueFromUrl) {
+        setSelectedCampaign(null);
+        setPage('lanjut-pembayaran');
+        window.history.replaceState({ view: 'lanjut-pembayaran' }, '', `/?${window.location.search.replace(/^\?/, '')}`);
+        return;
+      }
+
       setSelectedCampaign(null);
       setPage((state?.view as Page) ?? null);
     };
 
     const campaignIdFromUrl = getCampaignIdFromUrl();
-    const initialView = window.location.pathname.startsWith('/admin') ? 'admin-login' : 'home';
+    const paymentContinueFromUrl = getPaymentContinueFromUrl();
+    const initialView = window.location.pathname.startsWith('/admin')
+      ? 'admin-login'
+      : paymentContinueFromUrl
+        ? 'lanjut-pembayaran'
+        : 'home';
     const initialPath = window.location.pathname.startsWith('/admin') ? '/admin' : '/';
 
     if (campaignIdFromUrl) {
       setSelectedCampaign(campaignIdFromUrl);
       window.history.replaceState({ view: 'campaign', campaignId: campaignIdFromUrl }, '', `/?campaign=${campaignIdFromUrl}`);
+    } else if (paymentContinueFromUrl) {
+      window.history.replaceState({ view: 'lanjut-pembayaran' }, '', `/?${window.location.search.replace(/^\?/, '')}`);
     } else {
       window.history.replaceState({ view: initialView }, '', initialPath + window.location.search);
     }
@@ -638,7 +754,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   useEffect(() => {
     const storedCampaigns = loadCampaignsFromStorage();
     if (storedCampaigns && storedCampaigns.length > 0) {
-      setCampaigns(storedCampaigns);
+      const cleanedCampaigns = dedupeCampaigns(storedCampaigns);
+      setCampaigns(cleanedCampaigns);
+      window.localStorage.setItem(campaignStorageKey, JSON.stringify(cleanedCampaigns));
     }
 
     setCampaignsHydrated(true);
@@ -663,6 +781,10 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
       if (event.key === withdrawalRequestsKey) {
         setWithdrawalRequests(loadWithdrawalRequestsFromStorage());
+      }
+
+      if (event.key === pendingPaymentsKey) {
+        setPendingPayments(loadPendingPaymentsFromStorage());
       }
     };
 
@@ -691,7 +813,13 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       return;
     }
 
-    window.localStorage.setItem(campaignStorageKey, JSON.stringify(campaigns));
+    const cleanedCampaigns = dedupeCampaigns(campaigns);
+    if (cleanedCampaigns.length !== campaigns.length) {
+      setCampaigns(cleanedCampaigns);
+      return;
+    }
+
+    window.localStorage.setItem(campaignStorageKey, JSON.stringify(cleanedCampaigns));
   }, [campaigns, campaignsHydrated]);
 
   useEffect(() => {
@@ -702,7 +830,55 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     window.localStorage.setItem(withdrawalRequestsKey, JSON.stringify(withdrawalRequests));
   }, [withdrawalRequests]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    window.localStorage.setItem(pendingPaymentsKey, JSON.stringify(pendingPayments));
+  }, [pendingPayments]);
+
+  const visiblePendingPayments = user?.email
+    ? pendingPayments.filter((payment) => !payment.ownerEmail || payment.ownerEmail === user.email)
+    : [];
+
   const campaignsForDisplay = [...campaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
+
+  const donationHistoryForDisplay = campaignsForDisplay.flatMap((campaign) => {
+    if (campaign.donations && campaign.donations.length > 0) {
+      return [...campaign.donations]
+        .reverse()
+        .map((donation, index) => ({
+          id: campaign.id * 1000 + index,
+          campaignTitle: campaign.title,
+          amount: donation.amount,
+          date: new Date(donation.timestamp).toLocaleDateString('id-ID', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric'
+          }),
+          status: 'Sukses' as const,
+          campaignId: campaign.id
+        }));
+    }
+
+    if (campaign.donors > 0) {
+      return [{
+        id: campaign.id,
+        campaignTitle: campaign.title,
+        amount: campaign.collected,
+        date: new Date(campaign.createdAt ?? Date.now()).toLocaleDateString('id-ID', {
+          day: 'numeric',
+          month: 'short',
+          year: 'numeric'
+        }),
+        status: 'Sukses' as const,
+        campaignId: campaign.id
+      }];
+    }
+
+    return [];
+  });
 
   const baseAdminUsers: AdminUserRow[] = [
     { id: 1, name: 'Admin Utama', email: 'admin@bantusesama.id', role: 'admin', status: 'active', campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === 'admin@bantusesama.id').length },
@@ -909,24 +1085,27 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
   }, [selectedCampaignData]);
 
+  useEffect(() => {
+    setProfileEditName(user?.name ?? '');
+    setProfileEditMessage('');
+  }, [user?.email, user?.name, page]);
+
   // Routing utama
   if (page === 'donasi-saya') {
     return (
       <>
-        <Navbar onNavigate={navigatePage} onHome={goHome} user={user} onLogout={() => setUser(null)} />
+        <Navbar
+          onNavigate={navigatePage}
+          onHome={goHome}
+          user={user}
+          onLogout={() => setUser(null)}
+          pendingPayments={visiblePendingPayments}
+          onOpenPendingPayment={openPendingPayment}
+        />
         <DonasiSaya
           user={user}
           onLogin={() => navigatePage('login')}
-          donations={campaigns
-            .filter((campaign) => campaign.donors > 0)
-            .map((campaign) => ({
-              id: campaign.id,
-              campaignTitle: campaign.title,
-              amount: campaign.collected,
-              date: new Date(campaign.createdAt ?? Date.now()).toLocaleDateString('id-ID', { day: 'numeric', month: 'short', year: 'numeric' }),
-              status: 'Sukses' as const,
-              campaignId: campaign.id
-            }))}
+          donations={donationHistoryForDisplay}
         />
         <Chatbot />
       </>
@@ -935,7 +1114,14 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   if (selectedCampaignData) {
     return (
       <>
-        <Navbar onNavigate={navigatePage} onHome={goHome} user={user} onLogout={() => setUser(null)} />
+        <Navbar
+          onNavigate={navigatePage}
+          onHome={goHome}
+          user={user}
+          onLogout={() => setUser(null)}
+          pendingPayments={visiblePendingPayments}
+          onOpenPendingPayment={openPendingPayment}
+        />
         <CampaignDetail
           campaign={selectedCampaignData}
           user={user}
@@ -973,6 +1159,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                 : campaign
             )));
           }}
+          onNavigateToContinuePayment={openPendingPayment}
         />
         <Chatbot />
       </>
@@ -981,7 +1168,14 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   if (page === 'login') {
     return (
       <>
-        <Navbar onNavigate={navigatePage} onHome={goHome} user={user} onLogout={() => setUser(null)} />
+        <Navbar
+          onNavigate={navigatePage}
+          onHome={goHome}
+          user={user}
+          onLogout={() => setUser(null)}
+          pendingPayments={visiblePendingPayments}
+          onOpenPendingPayment={openPendingPayment}
+        />
         <LoginRegister onLogin={(u) => {
           setUser(u);
           setRegisteredUsers(loadRegisteredUsersFromStorage());
@@ -989,6 +1183,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
         }} />
       </>
     );
+  }
+  if (page === 'lanjut-pembayaran') {
+    return <ContinuePaymentPage onHome={goHome} user={user} />;
   }
   if (page === 'admin-login' || (page === 'admin' && !adminUser)) {
     return (
@@ -1004,7 +1201,14 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   if (page === 'buat-kampanye') {
     return (
       <>
-        <Navbar onNavigate={navigatePage} onHome={goHome} user={user} onLogout={() => setUser(null)} />
+        <Navbar
+          onNavigate={navigatePage}
+          onHome={goHome}
+          user={user}
+          onLogout={() => setUser(null)}
+          pendingPayments={visiblePendingPayments}
+          onOpenPendingPayment={openPendingPayment}
+        />
         <div className="max-w-md mx-auto py-12 px-4">
           <h2 className="text-2xl font-bold mb-4">Buat Kampanye</h2>
           <CreateCampaign user={user} onCreate={(c) => { setCampaigns(prev => [c, ...prev]); openCampaign(c.id); }} />
@@ -1020,13 +1224,69 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
     return (
       <>
-        <Navbar onNavigate={navigatePage} onHome={goHome} user={user} onLogout={() => setUser(null)} />
+        <Navbar
+          onNavigate={navigatePage}
+          onHome={goHome}
+          user={user}
+          onLogout={() => setUser(null)}
+          pendingPayments={visiblePendingPayments}
+          onOpenPendingPayment={openPendingPayment}
+        />
         <div className="max-w-4xl mx-auto py-12 px-4">
           <h2 className="text-2xl font-bold mb-4">Panel User</h2>
           {user ? (
             <div className="space-y-6">
-              <p>Selamat datang, {user.name}</p>
-              <button onClick={() => navigatePage('donasi-saya')} className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg">Lihat Donasi Saya</button>
+              <div className="grid gap-6 lg:grid-cols-[1fr_0.9fr]">
+                <div className="rounded-xl border border-gray-200 bg-white p-6">
+                  <p className="text-sm text-gray-500">Profil Saya</p>
+                  <h3 className="mt-1 text-xl font-semibold text-gray-900">{user.name}</h3>
+                  <p className="text-sm text-gray-600">{user.email || '-'}</p>
+
+                  <div className="mt-5 space-y-3">
+                    <label className="block text-sm font-medium text-gray-700">Edit nama akun</label>
+                    <input
+                      type="text"
+                      value={profileEditName}
+                      onChange={(event) => setProfileEditName(event.target.value)}
+                      className="w-full rounded-lg border border-gray-300 px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-600"
+                      placeholder="Masukkan nama baru"
+                    />
+                    <div className="flex flex-wrap gap-3">
+                      <button
+                        type="button"
+                        onClick={() => updateCurrentUserName(profileEditName)}
+                        className="rounded-lg bg-blue-600 px-4 py-2 font-medium text-white hover:bg-blue-700"
+                      >
+                        Simpan Nama
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setProfileEditName(user.name)}
+                        className="rounded-lg border border-gray-300 px-4 py-2 font-medium text-gray-700 hover:bg-gray-50"
+                      >
+                        Reset
+                      </button>
+                    </div>
+                    {profileEditMessage && <p className="text-sm text-emerald-600">{profileEditMessage}</p>}
+                  </div>
+                </div>
+
+                {visiblePendingPayments.length > 0 && (
+                  <div className="rounded-xl border border-amber-200 bg-amber-50 p-6">
+                    <p className="text-sm text-amber-700">Pembayaran Pending</p>
+                    <h3 className="mt-1 text-xl font-semibold text-amber-900">{visiblePendingPayments.length} transaksi</h3>
+                    <p className="mt-2 text-sm text-amber-800">
+                      Gunakan ikon profil di kanan atas untuk membuka notifikasi dan melanjutkan pembayaran.
+                    </p>
+                    <button onClick={() => navigatePage('lanjut-pembayaran')} className="mt-5 rounded-lg bg-amber-600 px-4 py-2 font-medium text-white hover:bg-amber-700">
+                      Buka Halaman Lanjut Bayar
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <button onClick={() => navigatePage('donasi-saya')} className="mt-4 rounded-lg bg-blue-600 px-4 py-2 text-white hover:bg-blue-700">Lihat Donasi Saya</button>
+
               <div className="rounded-xl border border-gray-200 bg-white p-6">
                 <h3 className="text-lg font-semibold text-gray-900 mb-4">Kampanye Saya</h3>
                 {userCampaigns.length === 0 ? (
@@ -1130,7 +1390,14 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   }
   return (
     <div className="min-h-screen bg-gray-50">
-      <Navbar onNavigate={navigatePage} onHome={goHome} user={user} onLogout={() => setUser(null)} />
+      <Navbar
+        onNavigate={navigatePage}
+        onHome={goHome}
+        user={user}
+        onLogout={() => setUser(null)}
+        pendingPayments={visiblePendingPayments}
+        onOpenPendingPayment={openPendingPayment}
+      />
 
       <section className="relative bg-gradient-to-br from-blue-600 to-blue-700 text-white py-20 overflow-hidden">
         <div className="absolute inset-0 opacity-20">

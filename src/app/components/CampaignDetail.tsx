@@ -32,6 +32,14 @@ interface CampaignDetailProps {
   onUpdateCampaign?: (campaignId: number, updates: Partial<Campaign>) => void;
   onRequestWithdrawal?: (campaignId: number, request: { amount: number; note: string }) => void;
   onDonationSuccess?: (amount: number, donorInfo: {name: string; message: string}) => void;
+  onNavigateToContinuePayment?: (payment: {
+    donationId: number;
+    orderId: string;
+    campaignTitle: string;
+    amount: number;
+    method: 'virtual_account' | 'ewallet';
+    redirectUrl?: string;
+  }) => void;
 }
 
 type AllocationEditorItem = { name: string; value: string; color: string };
@@ -78,7 +86,7 @@ const formatNumberWithSeparators = (value: string) => {
   return Number.isFinite(numericValue) ? numericValue.toLocaleString('id-ID') : value;
 };
 
-export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onRequestWithdrawal, onDonationSuccess, withdrawalRequests }: CampaignDetailProps) {
+export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onRequestWithdrawal, onDonationSuccess, onNavigateToContinuePayment, withdrawalRequests }: CampaignDetailProps) {
   // Compute combined disbursement history (campaign + successful withdrawals)
   const computedDisbursementHistory = (() => {
     if (!withdrawalRequests) {
@@ -117,6 +125,17 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
 
   const percentage = Math.min((campaign.collected / campaign.target) * 100, 100);
   const canEdit = user?.email && campaign.creatorEmail && user.email.toLowerCase() === campaign.creatorEmail.toLowerCase();
+  const isVerified = campaign.status !== 'pending' && campaign.status !== 'rejected';
+  const statusLabel = campaign.status === 'pending'
+    ? 'Menunggu Verifikasi'
+    : campaign.status === 'rejected'
+      ? 'Ditolak'
+      : 'Terverifikasi';
+  const statusDescription = campaign.status === 'pending'
+    ? 'Kampanye sedang menunggu verifikasi dari tim BantuSesama'
+    : campaign.status === 'rejected'
+      ? 'Kampanye belum disetujui oleh tim BantuSesama'
+      : 'Penggalang dana telah diverifikasi oleh tim BantuSesama';
   
   const getTimeAgo = (timestamp: number): string => {
     const now = Date.now();
@@ -550,14 +569,12 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                 </div>
               </div>
 
-              <div className="mb-6 p-4 bg-blue-50 rounded-lg">
+              <div className={`mb-6 p-4 rounded-lg ${isVerified ? 'bg-blue-50' : campaign.status === 'pending' ? 'bg-amber-50' : 'bg-rose-50'}`}>
                 <div className="flex items-start gap-3">
-                  <Shield className="w-5 h-5 text-blue-600 mt-0.5" />
+                  <Shield className={`w-5 h-5 mt-0.5 ${isVerified ? 'text-blue-600' : campaign.status === 'pending' ? 'text-amber-600' : 'text-rose-600'}`} />
                   <div>
-                    <p className="font-medium text-gray-900 mb-1">Kampanye Terverifikasi</p>
-                    <p className="text-sm text-gray-600">
-                      Penggalang dana telah diverifikasi oleh tim BantuSesama
-                    </p>
+                    <p className="font-medium text-gray-900 mb-1">Kampanye {statusLabel}</p>
+                    <p className="text-sm text-gray-600">{statusDescription}</p>
                   </div>
                 </div>
               </div>
@@ -633,6 +650,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
         campaignTitle={campaign.title}
         user={user}
         onDonationSuccess={onDonationSuccess}
+        onNavigateToContinuePayment={onNavigateToContinuePayment}
       />
     </div>
   );

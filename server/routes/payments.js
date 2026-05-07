@@ -6,10 +6,20 @@ const { sequelize } = require('../models');
 const { Donation, Campaign, User } = sequelize.models;
 
 // Initialize Midtrans Snap Client
+const midtransServerKey = String(process.env.MIDTRANS_SERVER_KEY || '').trim();
+const midtransClientKey = String(process.env.MIDTRANS_CLIENT_KEY || '').trim();
+const midtransIsProduction = String(process.env.MIDTRANS_IS_PRODUCTION || 'false').toLowerCase() === 'true';
+
 const snap = new midtransClient.Snap({
-  isProduction: String(process.env.MIDTRANS_IS_PRODUCTION || 'false').toLowerCase() === 'true',
-  serverKey: process.env.MIDTRANS_SERVER_KEY || 'SB-Mid-server-xxxxxx',
-  clientKey: process.env.MIDTRANS_CLIENT_KEY || 'SB-Mid-client-xxxxxx'
+  isProduction: midtransIsProduction,
+  serverKey: midtransServerKey || 'SB-Mid-server-xxxxxx',
+  clientKey: midtransClientKey || 'SB-Mid-client-xxxxxx'
+});
+
+console.log('Midtrans config loaded:', {
+  isProduction: midtransIsProduction,
+  serverKeyPrefix: midtransServerKey.slice(0, 10),
+  clientKeyPrefix: midtransClientKey.slice(0, 10)
 });
 
 const isDemoPaymentMode = String(process.env.PAYMENT_DEMO || '').toLowerCase() === 'true';
@@ -90,9 +100,10 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
     }
 
     // Midtrans transaction parameters
+    const numericAmount = Math.round(Number(amount));
     const transactionDetails = {
       order_id: `ORDER-${donation.id}`,
-      gross_amount: Number(amount)
+      gross_amount: numericAmount
     };
 
     const customerDetails = {
@@ -102,14 +113,20 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
       phone: '08111111111' // Placeholder
     };
 
+    const rawItemName = `Donasi untuk ${campaign.title}`;
+    const itemName = rawItemName.length > 50 ? rawItemName.slice(0, 50) : rawItemName;
+
     const itemDetails = [
       {
         id: `campaign_${campaignId}`,
-        price: Number(amount),
+        price: numericAmount,
         quantity: 1,
-        name: `Donasi untuk ${campaign.title}`
+        name: itemName
       }
     ];
+
+    const itemTotal = itemDetails.reduce((sum, item) => sum + (Number(item.price) * Number(item.quantity)), 0);
+    transactionDetails.gross_amount = itemTotal;
 
     // Payment method specific configuration
     let enabledPayments = [];
@@ -118,16 +135,18 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
         enabledPayments = ['bank_transfer'];
         break;
       case 'virtual_account':
-        enabledPayments = ['gopay', 'ovo', 'linkaja'];
+        // Virtual account payments use 'bank_transfer' in Snap.
+        // Snap will present supported banks (BCA, Mandiri, BNI, BRI, etc.)
+        enabledPayments = ['bank_transfer'];
         break;
       case 'card':
         enabledPayments = ['credit_card'];
         break;
       case 'ewallet':
-        enabledPayments = ['gopay', 'ovo', 'linkaja', 'dana'];
+        enabledPayments = ['gopay', 'shopeepay', 'ovo', 'dana'];
         break;
       default:
-        enabledPayments = ['bank_transfer', 'gopay', 'ovo', 'linkaja', 'credit_card'];
+        enabledPayments = ['bank_transfer', 'gopay', 'shopeepay', 'credit_card'];
     }
 
     const parameter = {
@@ -135,7 +154,7 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
       customer_details: customerDetails,
       item_details: itemDetails,
       enabled_payments: enabledPayments,
-      vt_target_bank: paymentMethod === 'bank_transfer' ? 'bca' : undefined,
+      // Note: do not set vt_target_bank here; Snap will manage VA number generation
       custom_field1: `Donor: ${isAnonymous ? 'Anonymous' : donorName}`,
       custom_field2: `Campaign ID: ${campaignId}`
     };
@@ -144,11 +163,31 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
     Object.keys(parameter).forEach(key => parameter[key] === undefined && delete parameter[key]);
 
     // Create Midtrans transaction
-    const transaction = await snap.createTransaction(parameter);
+    console.log('[CreateIntent-59] Calling Midtrans createTransaction with parameter:', JSON.stringify(parameter));
+    let transaction;
+    try {
+      transaction = await snap.createTransaction(parameter);
+      console.log('[CreateIntent-59] snap.createTransaction RETURNED:', JSON.stringify(transaction, null, 2));
+      console.log('[CreateIntent-59] Token in response:', transaction.token ? 'YES' : 'NO');
+    } catch (midtransError) {
+      console.error('[CreateIntent-59] snap.createTransaction threw error:', midtransError);
+      console.error('[CreateIntent-59] Error message:', midtransError.message);
+      console.error('[CreateIntent-59] ApiResponse:', JSON.stringify(midtransError.ApiResponse || 'NO APIRESP', null, 2));
+      throw midtransError;
+    }
+
     const transactionToken = transaction.token;
     const orderId = `ORDER-${donation.id}`;
 
-    // Midtrans status API accepts order_id; keep this stable for verification.
+    if (!transactionToken) {
+      console.error('[CreateIntent-59] ERROR: response.token is empty/falsy');
+      throw new Error('Midtrans response invalid: no token returned');
+    }
+
+    console.log('[CreateIntent-59] SUCCESS - token:', transactionToken);
+
+    // Store the order_id as transaction ID (Snap API doesn't return transaction.id)
+    // This order_id is used for status lookups with snap.transaction.status()
     donation.midtransTransactionId = orderId;
     await donation.save();
 
@@ -157,7 +196,7 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
       transactionId: donation.midtransTransactionId,
       donationId: donation.id,
       orderId,
-      amount,
+      amount: numericAmount,
       demoMode: false
     });
 
@@ -175,7 +214,7 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
  */
 router.post('/confirm', optionalAuth, async (req, res) => {
   try {
-    const { transactionId, donationId, orderId } = req.body;
+    const { transactionId, donationId, orderId, transactionStatus } = req.body;
 
     if (!donationId) {
       return res.status(400).json({ error: 'Donation ID required' });
@@ -186,6 +225,10 @@ router.post('/confirm', optionalAuth, async (req, res) => {
       return res.status(404).json({ error: 'Donation not found' });
     }
 
+    const callbackStatus = String(transactionStatus || '').toLowerCase();
+    const statusMeansSuccess = callbackStatus === 'settlement' || callbackStatus === 'capture' || callbackStatus === 'success';
+    const statusMeansPending = callbackStatus === 'pending' || callbackStatus === 'authorize';
+
     if (isDemoPaymentMode) {
       // Demo mode: mark as succeeded
       donation.paymentStatus = 'succeeded';
@@ -193,7 +236,9 @@ router.post('/confirm', optionalAuth, async (req, res) => {
 
       // Update campaign collected amount
       const campaign = await Campaign.findByPk(donation.campaignId);
-      campaign.collected = (campaign.collected || 0) + Number(donation.amount);
+      const currentCollected = Number(campaign.collected) || 0;
+      const donationAmount = Number(donation.amount) || 0;
+      campaign.collected = currentCollected + donationAmount;
       await campaign.save();
 
       return res.json({
@@ -206,56 +251,58 @@ router.post('/confirm', optionalAuth, async (req, res) => {
 
     // For real Midtrans: verify transaction with server
     if (donation.midtransTransactionId) {
+      const previousStatus = donation.paymentStatus;
+      let transaction = null;
+
       try {
-        const previousStatus = donation.paymentStatus;
-        const transaction = await snap.transaction.status(donation.midtransTransactionId);
-
-        // Update donation status berdasarkan Midtrans response
-        if (transaction.transaction_status === 'settlement' || transaction.transaction_status === 'capture') {
-          donation.paymentStatus = 'succeeded';
-        } else if (transaction.transaction_status === 'pending') {
-          donation.paymentStatus = 'processing';
-        } else if (transaction.transaction_status === 'deny' || transaction.transaction_status === 'failed') {
-          donation.paymentStatus = 'failed';
-        }
-
-        if (donation.paymentStatus === 'succeeded' && previousStatus !== 'succeeded') {
-          const campaign = await Campaign.findByPk(donation.campaignId);
-          campaign.collected = (campaign.collected || 0) + Number(donation.amount);
-          await campaign.save();
-        }
-
-        await donation.save();
-
-        return res.json({
-          success: donation.paymentStatus === 'succeeded',
-          paymentStatus: donation.paymentStatus,
-          transactionStatus: transaction.transaction_status,
-          orderId
-        });
+        transaction = await snap.transaction.status(donation.midtransTransactionId);
+        console.log('[Confirm] Midtrans status response for', donation.midtransTransactionId, ':', JSON.stringify(transaction, null, 2));
       } catch (error) {
         console.error('Midtrans verification error:', error);
 
-        // Snap already reported success on the client, so don't fail the donation
-        // if the status lookup is temporarily unavailable or the credentials are
-        // out of sync. Finalize the donation and surface a warning instead.
-        const previousStatus = donation.paymentStatus;
-        donation.paymentStatus = 'succeeded';
-        await donation.save();
+        if (statusMeansSuccess) {
+          transaction = { transaction_status: callbackStatus || 'settlement' };
+        } else if (statusMeansPending) {
+          transaction = { transaction_status: 'pending' };
+        } else {
+          donation.paymentStatus = 'processing';
+          await donation.save();
 
-        if (previousStatus !== 'succeeded') {
-          const campaign = await Campaign.findByPk(donation.campaignId);
-          campaign.collected = (campaign.collected || 0) + Number(donation.amount);
-          await campaign.save();
+          return res.json({
+            success: false,
+            paymentStatus: 'processing',
+            orderId,
+            warning: 'Midtrans verification failed; donation set to processing. Please check webhook or try verifying later.'
+          });
         }
-
-        return res.json({
-          success: true,
-          paymentStatus: 'succeeded',
-          orderId,
-          warning: 'Midtrans verification skipped after Snap success'
-        });
       }
+
+      // Update donation status berdasarkan Midtrans response
+      if (statusMeansSuccess || transaction.transaction_status === 'settlement' || transaction.transaction_status === 'capture') {
+        donation.paymentStatus = 'succeeded';
+      } else if (statusMeansPending || transaction.transaction_status === 'pending') {
+        donation.paymentStatus = 'processing';
+      } else if (transaction.transaction_status === 'deny' || transaction.transaction_status === 'failed' || transaction.transaction_status === 'cancel') {
+        donation.paymentStatus = 'failed';
+      }
+
+      if (donation.paymentStatus === 'succeeded' && previousStatus !== 'succeeded') {
+        const campaign = await Campaign.findByPk(donation.campaignId);
+        // Convert collected to number before arithmetic
+        const currentCollected = Number(campaign.collected) || 0;
+        const donationAmount = Number(donation.amount) || 0;
+        campaign.collected = currentCollected + donationAmount;
+        await campaign.save();
+      }
+
+      await donation.save();
+
+      return res.json({
+        success: donation.paymentStatus === 'succeeded',
+        paymentStatus: donation.paymentStatus,
+        transactionStatus: transaction.transaction_status,
+        orderId
+      });
     }
 
     return res.status(400).json({
@@ -309,6 +356,59 @@ router.get('/status/:orderId', optionalAuth, async (req, res) => {
   } catch (error) {
     console.error('Payment status error:', error);
     res.status(500).json({ error: 'Failed to get payment status' });
+  }
+});
+
+/**
+ * POST /api/payments/cancel
+ * Cancel a pending donation
+ */
+router.post('/cancel', optionalAuth, async (req, res) => {
+  try {
+    const { donationId } = req.body;
+
+    if (!donationId) {
+      return res.status(400).json({ error: 'Donation ID required' });
+    }
+
+    const donation = await Donation.findByPk(donationId);
+    if (!donation) {
+      return res.status(404).json({ error: 'Donation not found' });
+    }
+
+    if (req.user && donation.userId !== req.user.id && !req.user.isAdmin) {
+      return res.status(403).json({ error: 'Unauthorized' });
+    }
+
+    if (donation.paymentStatus === 'succeeded') {
+      return res.status(409).json({ error: 'Donation already completed and cannot be cancelled' });
+    }
+
+    if (!donation.midtransTransactionId) {
+      donation.paymentStatus = 'failed';
+      await donation.save();
+      return res.json({ success: true, message: 'Donation marked as cancelled' });
+    }
+
+    try {
+      await snap.transaction.cancel(donation.midtransTransactionId);
+      donation.paymentStatus = 'failed';
+      await donation.save();
+      return res.json({ success: true, message: 'Transaction cancelled' });
+    } catch (err) {
+      console.error('Midtrans cancel error:', err);
+
+      donation.paymentStatus = 'failed';
+      await donation.save();
+      return res.json({
+        success: true,
+        message: 'Transaction cancellation request could not reach Midtrans, but local status was updated to cancelled'
+      });
+    }
+
+  } catch (error) {
+    console.error('Cancel payment error:', error);
+    res.status(500).json({ error: error.message || 'Failed to cancel payment' });
   }
 });
 

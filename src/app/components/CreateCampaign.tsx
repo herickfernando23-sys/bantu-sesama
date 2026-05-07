@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { Upload } from 'lucide-react';
 
+const apiBaseUrl = String(import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
+
 interface CreateCampaignProps {
   onCreate: (campaign: any) => void;
   user?: { name: string; email?: string } | null;
@@ -146,32 +148,55 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
         return;
       }
 
-      // Create campaign object
+      const response = await fetch(`${apiBaseUrl}/api/campaigns`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          title: formData.title,
+          description: formData.description,
+          goal: targetAmount,
+          creatorEmail: user.email,
+          organizer: user.name,
+          location: formData.location,
+          category: formData.category,
+          image: imagePreview || 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+          status: 'pending',
+          daysLeft: 30,
+          fullDescription: formData.fullDescription || formData.description
+        })
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Gagal membuat kampanye');
+      }
+
+      const createdCampaign = await response.json();
       const newCampaign = {
-        id: Math.floor(Math.random() * 10000),
+        id: createdCampaign.id,
         createdAt: Date.now(),
-        title: formData.title,
-        description: formData.description,
-        fullDescription: formData.fullDescription || formData.description,
-        image: imagePreview || 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-        location: formData.location,
-        creatorEmail: user.email,
+        title: createdCampaign.title,
+        description: createdCampaign.description,
+        fullDescription: createdCampaign.fullDescription || formData.fullDescription || formData.description,
+        image: createdCampaign.image || imagePreview || 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+        location: createdCampaign.location || formData.location,
+        creatorEmail: createdCampaign.creatorEmail || user.email,
         target: targetAmount,
-        collected: 0,
+        collected: Number(createdCampaign.collected || 0),
         donors: 0,
-        daysLeft: 30,
-        category: formData.category,
-        organizer: user.name,
-        status: 'pending',
-        story: formData.fullDescription || formData.description,
+        daysLeft: Number(createdCampaign.daysLeft || 30),
+        category: createdCampaign.category || formData.category,
+        organizer: createdCampaign.organizer || user.name,
+        status: createdCampaign.status || 'pending',
+        story: createdCampaign.fullDescription || formData.fullDescription || formData.description,
         fundAllocation: [
           { name: 'Alokasi Dana', value: targetAmount, color: '#10B981' }
         ],
         disbursementHistory: []
       };
 
-      // In a real app, you'd send this to the backend
-      // For now, just create it locally
       onCreate(newCampaign);
 
       // Reset form
@@ -185,7 +210,7 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
       });
       setSelectedImage(null);
 
-      alert('Kampanye berhasil dibuat!');
+      alert('Kampanye berhasil dibuat dan menunggu verifikasi admin.');
     } catch (err) {
       showError('Terjadi kesalahan saat membuat kampanye');
       console.error(err);

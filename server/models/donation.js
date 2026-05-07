@@ -50,6 +50,10 @@ module.exports = (sequelize) => {
       type: DataTypes.STRING,
       allowNull: true
     },
+    midtransTransactionToken: {
+      type: DataTypes.TEXT,
+      allowNull: true
+    },
     donorName: { 
       type: DataTypes.STRING, 
       allowNull: true 

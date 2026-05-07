@@ -1,40 +1,94 @@
-import { useEffect, useState } from 'react';
-import { X, CreditCard, Check, Calendar, Loader } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
+import { X, CreditCard, Check, Calendar, Loader, Clock3, RefreshCw, ExternalLink } from 'lucide-react';
 
-const isDemoPaymentMode = String(import.meta.env.VITE_PAYMENT_DEMO || '').toLowerCase() === 'true';
 const apiBaseUrl = String(import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
 const midtransClientKey = String(import.meta.env.VITE_MIDTRANS_CLIENT_KEY || '').trim();
+const viteMidtransIsProduction = String(import.meta.env.VITE_MIDTRANS_IS_PRODUCTION || '').toLowerCase() === 'true';
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+// Log env vars for debugging
+console.log('[PaymentModal] Env vars loaded:', {
+  apiBaseUrl,
+  midtransClientKeyPrefix: midtransClientKey.slice(0, 10),
+  viteMidtransIsProduction
+});
 
 declare global {
   interface Window {
     snap?: {
       pay: (token: string, options?: Record<string, unknown>) => void;
+      hide?: () => void;
+      reset?: () => void;
     };
   }
 }
 
-const ensureMidtransSnapLoaded = async () => {
+// Preload Snap script immediately
+const preloadMidtransSnap = () => {
   if (window.snap) {
+    console.log('[Midtrans] Snap SDK already loaded');
     return;
   }
 
-  await new Promise<void>((resolve, reject) => {
-    const existing = document.querySelector('script[data-midtrans-snap="true"]') as HTMLScriptElement | null;
-    if (existing) {
-      existing.addEventListener('load', () => resolve(), { once: true });
-      existing.addEventListener('error', () => reject(new Error('Gagal memuat Midtrans Snap SDK')), { once: true });
-      return;
-    }
+  const existing = document.querySelector('script[data-midtrans-snap="true"]');
+  if (existing) {
+    console.log('[Midtrans] Snap script tag already exists');
+    return;
+  }
 
-    const script = document.createElement('script');
-    script.src = 'https://app.midtrans.com/snap/snap.js';
-    script.setAttribute('data-client-key', midtransClientKey);
-    script.setAttribute('data-midtrans-snap', 'true');
-    script.async = true;
-    script.onload = () => resolve();
-    script.onerror = () => reject(new Error('Gagal memuat Midtrans Snap SDK'));
-    document.body.appendChild(script);
+  const snapUrl = viteMidtransIsProduction
+    ? 'https://app.midtrans.com/snap/snap.js'
+    : 'https://app.sandbox.midtrans.com/snap/snap.js';
+  if (!viteMidtransIsProduction) {
+    console.warn('[Midtrans] Sandbox mode active, TEST ribbon is expected until production mode is enabled');
+  }
+  console.log('[Midtrans] Preloading Snap SDK from', snapUrl);
+  
+  const script = document.createElement('script');
+  script.src = snapUrl;
+  script.setAttribute('data-client-key', midtransClientKey);
+  script.setAttribute('data-midtrans-snap', 'true');
+  script.async = true;
+  script.onload = () => {
+    console.log('[Midtrans] Snap SDK loaded successfully, window.snap:', typeof window.snap);
+  };
+  script.onerror = (err) => {
+    console.error('[Midtrans] Failed to load Snap SDK from', snapUrl, err);
+  };
+  document.body.appendChild(script);
+  console.log('[Midtrans] Script tag appended to body');
+};
+
+// Call preload immediately
+preloadMidtransSnap();
+
+const ensureMidtransSnapLoaded = async () => {
+  if (window.snap) {
+    console.log('[Midtrans] window.snap available');
+    return;
+  }
+
+  console.log('[Midtrans] Waiting for Snap SDK to load...');
+  
+  // Wait for script to load (max 10 seconds)
+  return new Promise<void>((resolve, reject) => {
+    let checkCount = 0;
+    const maxChecks = 100; // 100 * 100ms = 10 seconds
+    
+    const checkSnap = () => {
+      checkCount++;
+      if (window.snap) {
+        console.log('[Midtrans] Snap SDK detected after', checkCount * 100, 'ms');
+        resolve();
+      } else if (checkCount >= maxChecks) {
+        console.error('[Midtrans] Timeout waiting for Snap SDK');
+        reject(new Error('Timeout: Midtrans Snap SDK tidak siap setelah 10 detik'));
+      } else {
+        setTimeout(checkSnap, 100);
+      }
+    };
+    
+    checkSnap();
   });
 };
 
@@ -47,6 +101,60 @@ const formatNumberWithSeparators = (value: string) => {
   return Number.isFinite(numericValue) ? numericValue.toLocaleString('id-ID') : value;
 };
 
+type PendingPaymentDetails = {
+  transaction_status?: string;
+  status?: string;
+  redirect_url?: string;
+  url?: string;
+  va_numbers?: Array<{ bank?: string; va_number?: string }>;
+  actions?: Array<{ name?: string; url?: string }>;
+  [key: string]: unknown;
+};
+
+type PendingPaymentRecord = {
+  donationId: number;
+  orderId: string;
+  campaignTitle: string;
+  amount: number;
+  method: 'virtual_account' | 'ewallet';
+  redirectUrl?: string;
+  ownerEmail?: string;
+  createdAt: number;
+  updatedAt: number;
+};
+
+const pendingPaymentsKey = 'bantusesama-pending-payments';
+
+const readPendingPayments = () => {
+  try {
+    const raw = window.localStorage.getItem(pendingPaymentsKey);
+    const parsed = raw ? (JSON.parse(raw) as PendingPaymentRecord[]) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [] as PendingPaymentRecord[];
+  }
+};
+
+const writePendingPayments = (payments: PendingPaymentRecord[]) => {
+  window.localStorage.setItem(pendingPaymentsKey, JSON.stringify(payments));
+  window.dispatchEvent(new StorageEvent('storage', { key: pendingPaymentsKey, newValue: JSON.stringify(payments) }));
+};
+
+const upsertPendingPayment = (payment: PendingPaymentRecord) => {
+  const payments = readPendingPayments();
+  const nextPayments = [
+    payment,
+    ...payments.filter((item) => item.donationId !== payment.donationId && item.orderId !== payment.orderId)
+  ];
+  writePendingPayments(nextPayments);
+};
+
+const removePendingPayment = (paymentId: number, orderId: string) => {
+  const payments = readPendingPayments();
+  const nextPayments = payments.filter((item) => item.donationId !== paymentId && item.orderId !== orderId);
+  writePendingPayments(nextPayments);
+};
+
 interface PaymentModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -54,6 +162,14 @@ interface PaymentModalProps {
   campaignTitle: string;
   user?: { id?: number; name: string; email?: string } | null;
   onDonationSuccess?: (amount: number, donorInfo: {name: string; message: string}) => void;
+  onNavigateToContinuePayment?: (payment: {
+    donationId: number;
+    orderId: string;
+    campaignTitle: string;
+    amount: number;
+    method: 'virtual_account' | 'ewallet';
+    redirectUrl?: string;
+  }) => void;
 }
 
 export function PaymentModal({
@@ -62,9 +178,11 @@ export function PaymentModal({
   campaignId,
   campaignTitle,
   user,
-  onDonationSuccess
+  onDonationSuccess,
+  onNavigateToContinuePayment
 }: PaymentModalProps) {
-  const [step, setStep] = useState<'identity' | 'amount' | 'payment' | 'success' | 'error'>('identity');
+  const [step, setStep] = useState<'identity' | 'amount' | 'payment' | 'pending' | 'success' | 'error'>('identity');
+  const stepRef = useRef<typeof step>(step);
   const [amount, setAmount] = useState('');
   const [isRecurring, setIsRecurring] = useState(false);
   const [donorName, setDonorName] = useState(user?.name ?? '');
@@ -78,7 +196,12 @@ export function PaymentModal({
   const [transactionId, setTransactionId] = useState('');
   const [transactionToken, setTransactionToken] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState<'bank_transfer' | 'virtual_account' | 'card' | 'ewallet'>('bank_transfer');
+  const [pendingMessage, setPendingMessage] = useState('');
+  const [pendingDetails, setPendingDetails] = useState<PendingPaymentDetails | null>(null);
+  const [checkingStatus, setCheckingStatus] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState<'virtual_account' | 'ewallet'>('ewallet');
+  const [isSnapReady, setIsSnapReady] = useState(!!window.snap);
+  const [isDemoPaymentMode, setIsDemoPaymentMode] = useState(false);
 
   const resetForm = () => {
     setStep('identity');
@@ -93,6 +216,9 @@ export function PaymentModal({
     setOrderId('');
     setTransactionId('');
     setTransactionToken('');
+    setPendingMessage('');
+    setPendingDetails(null);
+    setCheckingStatus(false);
   };
 
   useEffect(() => {
@@ -100,6 +226,43 @@ export function PaymentModal({
       resetForm();
     }
   }, [isOpen]);
+
+  useEffect(() => {
+    stepRef.current = step;
+  }, [step]);
+
+  useEffect(() => {
+    if (!isOpen || step !== 'payment') {
+      return;
+    }
+
+    if (window.snap) {
+      setIsSnapReady(true);
+      return;
+    }
+
+    let cancelled = false;
+
+    const checkSnapReady = () => {
+      if (cancelled) {
+        return;
+      }
+
+      if (window.snap) {
+        setIsSnapReady(true);
+        return;
+      }
+
+      window.setTimeout(checkSnapReady, 100);
+    };
+
+    setIsSnapReady(false);
+    checkSnapReady();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [isOpen, step]);
 
   if (!isOpen) return null;
 
@@ -125,131 +288,64 @@ export function PaymentModal({
     setStep('amount');
   };
 
+  // Move to payment step first. Actual Midtrans transaction/token
+  // will be created when the user clicks "Bayar" so the selected
+  // payment method is used to generate the correct token.
   const handleCreatePaymentIntent = async () => {
     if (!amount || Number(amount) < 10000) {
       setError('Minimal donasi Rp 10.000');
       return;
     }
 
-    setLoading(true);
     setError('');
-
-    try {
-      const response = await fetch(`${apiBaseUrl}/api/payments/create-intent`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`
-        },
-        body: JSON.stringify({
-          amount: Number(amount),
-          campaignId,
-          recurringType: isRecurring ? 'monthly' : 'one-time',
-          donorName: isAnonymous ? 'Anonymous' : donorName,
-          donorEmail,
-          isAnonymous,
-          message: donorMessage,
-          paymentMethod
-        })
-      });
-
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.error || 'Gagal membuat transaksi pembayaran');
-      }
-
-      const data = await response.json();
-      setDonationId(Number(data.donationId));
-      setOrderId(data.orderId || '');
-      setTransactionId(data.transactionId || '');
-      setTransactionToken(data.transactionToken || '');
-      setStep('payment');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Terjadi kesalahan');
-    } finally {
-      setLoading(false);
-    }
+    // Clear any previously created transaction/token so selected payment method
+    // will be used to create a fresh Midtrans token when user clicks Bayar.
+    setDonationId(null);
+    setOrderId('');
+    setTransactionId('');
+    setTransactionToken('');
+    setIsDemoPaymentMode(false);
+    setStep('payment');
   };
 
-  const handlePayment = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handlePaymentMethodChange = (nextMethod: 'virtual_account' | 'ewallet') => {
+    setPaymentMethod(nextMethod);
+    setDonationId(null);
+    setOrderId('');
+    setTransactionId('');
+    setTransactionToken('');
+    setIsDemoPaymentMode(false);
+  };
 
+  const completeSuccessfulPayment = (paymentAmount: number, message: string) => {
+    if (donationId) {
+      removePendingPayment(donationId, orderId);
+    }
+    setPendingMessage('');
+    setPendingDetails(null);
+    setSuccessMessage(message);
+    onDonationSuccess?.(paymentAmount, {
+      name: isAnonymous ? 'Anonymous' : donorName,
+      message: donorMessage
+    });
+    setStep('success');
+
+    setTimeout(() => {
+      onClose();
+      resetForm();
+    }, 3000);
+  };
+
+  const checkPendingStatus = async () => {
     if (!donationId) {
-      setError('Transaksi belum siap. Silakan ulangi dari langkah nominal.');
+      setError('Data pembayaran belum lengkap.');
       return;
     }
 
-    setLoading(true);
+    setCheckingStatus(true);
     setError('');
 
     try {
-      if (!isDemoPaymentMode) {
-        if (!transactionToken) {
-          throw new Error('Token pembayaran Midtrans tidak tersedia');
-        }
-        if (!midtransClientKey) {
-          throw new Error('VITE_MIDTRANS_CLIENT_KEY belum diisi di .env');
-        }
-
-        await ensureMidtransSnapLoaded();
-        if (!window.snap) {
-          throw new Error('Midtrans Snap SDK belum siap');
-        }
-
-        setLoading(false);
-        window.snap.pay(transactionToken, {
-          onSuccess: async (result: Record<string, unknown>) => {
-            try {
-              const response = await fetch(`${apiBaseUrl}/api/payments/confirm`, {
-                method: 'POST',
-                headers: {
-                  'Content-Type': 'application/json',
-                  Authorization: `Bearer ${localStorage.getItem('token') || ''}`
-                },
-                body: JSON.stringify({
-                  donationId,
-                  orderId,
-                  transactionId: String(result.transaction_id || transactionId || '')
-                })
-              });
-
-              if (!response.ok) {
-                const body = await response.json().catch(() => ({}));
-                throw new Error(body.error || 'Konfirmasi pembayaran gagal');
-              }
-
-              const donationAmount = Number(amount);
-              setSuccessMessage(`Donasi Rp ${donationAmount.toLocaleString('id-ID')} berhasil diproses`);
-              onDonationSuccess?.(donationAmount, {
-                name: isAnonymous ? 'Anonymous' : donorName,
-                message: donorMessage
-              });
-              setStep('success');
-              setTimeout(() => {
-                onClose();
-                resetForm();
-              }, 3000);
-            } catch (err) {
-              setError(err instanceof Error ? err.message : 'Konfirmasi pembayaran gagal');
-              setStep('error');
-            }
-          },
-          onPending: () => {
-            setSuccessMessage('Pembayaran Anda tercatat sebagai pending. Silakan selesaikan pembayaran di channel yang dipilih.');
-            setStep('success');
-          },
-          onError: () => {
-            setError('Pembayaran Midtrans gagal. Silakan coba lagi.');
-            setStep('error');
-          },
-          onClose: () => {
-            setError('Popup Midtrans ditutup sebelum pembayaran selesai.');
-            setStep('error');
-          }
-        });
-        return;
-      }
-
       const response = await fetch(`${apiBaseUrl}/api/payments/confirm`, {
         method: 'POST',
         headers: {
@@ -259,7 +355,271 @@ export function PaymentModal({
         body: JSON.stringify({
           donationId,
           orderId,
-          transactionId
+          transactionId,
+          transactionStatus: String(pendingDetails?.transaction_status || pendingDetails?.status || '')
+        })
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Konfirmasi pembayaran gagal');
+      }
+
+      const result = await response.json();
+      if (result.paymentStatus === 'succeeded' || result.success) {
+        const donationAmount = Number(amount);
+        completeSuccessfulPayment(donationAmount, `Donasi Rp ${donationAmount.toLocaleString('id-ID')} berhasil diproses setelah status berubah menjadi ${result.transactionStatus || 'succeeded'}`);
+        return;
+      }
+
+      setPendingMessage('Pembayaran masih pending. Silakan selesaikan pembayaran di channel yang dipilih lalu cek lagi beberapa saat lagi.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal mengecek status pembayaran');
+    } finally {
+      setCheckingStatus(false);
+    }
+  };
+
+  const cancelPendingPayment = async () => {
+    if (!donationId) {
+      setError('Data pembayaran belum lengkap.');
+      return;
+    }
+
+    const confirmed = window.confirm('Batalkan pembayaran ini? Transaksi pending akan dihentikan.');
+    if (!confirmed) {
+      return;
+    }
+
+    setCheckingStatus(true);
+    setError('');
+
+    try {
+      const response = await fetch(`${apiBaseUrl}/api/payments/cancel`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+        },
+        body: JSON.stringify({ donationId })
+      });
+
+      if (!response.ok) {
+        const body = await response.json().catch(() => ({}));
+        throw new Error(body.error || 'Gagal membatalkan pembayaran');
+      }
+
+      removePendingPayment(donationId, orderId);
+      setPendingMessage('Pembayaran berhasil dibatalkan.');
+      setStep('error');
+      setError('Pembayaran telah dibatalkan.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Gagal membatalkan pembayaran');
+    } finally {
+      setCheckingStatus(false);
+    }
+  };
+
+  const handlePayment = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    // donationId and transaction token will be created on-demand below
+
+    setLoading(true);
+    setError('');
+
+    try {
+      console.log('[Payment] Starting payment flow with method:', paymentMethod);
+
+      let createdData: any = null;
+      let tokenToUse = '';
+
+      try {
+        const createResp = await fetch(`${apiBaseUrl}/api/payments/create-intent`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+          },
+          body: JSON.stringify({
+            amount: Number(amount),
+            campaignId,
+            recurringType: isRecurring ? 'monthly' : 'one-time',
+            donorName: isAnonymous ? 'Anonymous' : donorName,
+            donorEmail,
+            isAnonymous,
+            message: donorMessage,
+            paymentMethod
+          })
+        });
+
+        if (!createResp.ok) {
+          const body = await createResp.json().catch(() => ({}));
+          throw new Error(body.error || 'Gagal membuat transaksi pembayaran');
+        }
+
+        const data = await createResp.json();
+        createdData = data;
+        tokenToUse = data.transactionToken || '';
+        setDonationId(Number(data.donationId));
+        setOrderId(data.orderId || '');
+        setTransactionId(data.transactionId || '');
+        setTransactionToken(tokenToUse);
+        setIsDemoPaymentMode(Boolean(data.demoMode));
+        console.log('[Payment] Created Midtrans transaction token for method', paymentMethod, 'token:', !!tokenToUse);
+      } catch (err) {
+        console.error('[Payment] Failed to create Midtrans transaction:', err);
+        throw err;
+      }
+
+      const demoFlag = Boolean(createdData?.demoMode);
+
+      if (!demoFlag) {
+        if (!midtransClientKey) {
+          throw new Error('VITE_MIDTRANS_CLIENT_KEY belum diisi di .env');
+        }
+
+        if (!isSnapReady || !window.snap) {
+          throw new Error('Midtrans Snap belum siap. Tunggu beberapa detik lalu coba lagi.');
+        }
+
+        console.log('[Payment] Snap SDK is ready, window.snap:', typeof window.snap);
+        console.log('[Payment] Calling window.snap.pay with token:', tokenToUse);
+        setLoading(false);
+
+        let snapCallbackFired = false;
+        const snapTimeoutHandle = setTimeout(() => {
+            if (!snapCallbackFired) {
+            console.error('[Payment] TIMEOUT: Snap popup did not show or callback not fired after 10 seconds');
+            setError('Pembayaran tidak bisa dilanjutkan saat ini. Silakan coba lagi beberapa saat.');
+            setStep('error');
+          }
+        }, 10000);
+
+        try {
+          const donationIdForCallback = createdData?.donationId ? Number(createdData.donationId) : donationId;
+          const orderIdForCallback = createdData?.orderId || orderId;
+          const transactionIdForCallback = createdData?.transactionId || transactionId;
+          window.snap.pay(tokenToUse, {
+            onSuccess: async (result: Record<string, unknown>) => {
+              snapCallbackFired = true;
+              clearTimeout(snapTimeoutHandle);
+              console.info('Midtrans onSuccess', { result, donationId: donationIdForCallback, orderId: orderIdForCallback });
+              try {
+                const response = await fetch(`${apiBaseUrl}/api/payments/confirm`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+                  },
+                  body: JSON.stringify({
+                    donationId: donationIdForCallback,
+                    orderId: orderIdForCallback,
+                    transactionId: String(result.transaction_id || transactionIdForCallback || ''),
+                    transactionStatus: String(result.transaction_status || '')
+                  })
+                });
+
+                if (!response.ok) {
+                  const body = await response.json().catch(() => ({}));
+                  throw new Error(body.error || 'Konfirmasi pembayaran gagal');
+                }
+
+                const donationAmount = Number(amount);
+                completeSuccessfulPayment(donationAmount, `Donasi Rp ${donationAmount.toLocaleString('id-ID')} berhasil diproses`);
+              } catch (err) {
+                console.error('Confirm failed after onSuccess', err);
+                setError(err instanceof Error ? err.message : 'Konfirmasi pembayaran gagal');
+                setStep('error');
+              }
+            },
+            onPending: (result: Record<string, unknown>) => {
+              snapCallbackFired = true;
+              clearTimeout(snapTimeoutHandle);
+              console.info('Midtrans onPending', { result, donationId: donationIdForCallback, orderId: orderIdForCallback });
+              
+              // Hanya simpan pending jika user punya akun (user?.email ada)
+              if (!user?.email) {
+                // User tanpa akun: langsung cancel pembayaran
+                fetch(`${apiBaseUrl}/api/payments/cancel`, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+                  },
+                  body: JSON.stringify({ donationId: donationIdForCallback })
+                }).catch(err => console.error('Auto-cancel failed:', err));
+                
+                setError('Pembayaran tanpa akun tidak dapat disimpan sebagai pending. Silakan donasi dengan akun untuk dapat track pembayaran.');
+                setStep('error');
+                return;
+              }
+              
+              // User dengan akun: simpan ke pending payments
+              const redirectUrlValue = String(result.redirect_url || result.url || '');
+              console.info('Saving pending payment with redirectUrl:', { redirectUrlValue });
+              
+              const pendingPaymentData = {
+                donationId: Number(donationIdForCallback || 0),
+                orderId: String(orderIdForCallback || ''),
+                campaignTitle,
+                amount: Number(amount),
+                method: paymentMethod,
+                redirectUrl: redirectUrlValue,
+                ownerEmail: user.email,
+                createdAt: Date.now(),
+                updatedAt: Date.now()
+              };
+              
+              console.info('Pending payment data:', pendingPaymentData);
+              upsertPendingPayment(pendingPaymentData);
+              setPendingDetails(result);
+              setPendingMessage('Pembayaran Anda tercatat sebagai pending. Silakan selesaikan pembayaran di channel yang dipilih.');
+              setStep('pending');
+            },
+            onError: (result?: Record<string, unknown>) => {
+              snapCallbackFired = true;
+              clearTimeout(snapTimeoutHandle);
+              console.error('Midtrans onError', { result, donationId: donationIdForCallback, orderId: orderIdForCallback });
+              setError('Pembayaran Midtrans gagal. Silakan coba lagi.');
+              setStep('error');
+            },
+            onClose: () => {
+              snapCallbackFired = true;
+              clearTimeout(snapTimeoutHandle);
+              console.info('Midtrans onClose', { donationId: donationIdForCallback, orderId: orderIdForCallback, transactionId: transactionIdForCallback, step: stepRef.current });
+              if (stepRef.current === 'payment') {
+                setError('Pembayaran dibatalkan. Silakan coba lagi jika ingin melanjutkan donasi.');
+                setStep('error');
+              } else {
+                console.info('Midtrans closed after success/pending — ignoring');
+              }
+            }
+          });
+          return;
+        } catch (err) {
+          console.error('[Payment] Error calling snap.pay:', err);
+          clearTimeout(snapTimeoutHandle);
+          setError(`Gagal membuka Snap: ${err instanceof Error ? err.message : 'Unknown error'}`);
+          setStep('error');
+          return;
+        }
+      }
+
+      const donationIdToUse = createdData?.donationId ? Number(createdData.donationId) : donationId;
+      const orderIdToUse = createdData?.orderId ? (createdData.orderId || '') : orderId;
+      const transactionIdToUse = createdData?.transactionId ? (createdData.transactionId || '') : transactionId;
+
+      const response = await fetch(`${apiBaseUrl}/api/payments/confirm`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+        },
+        body: JSON.stringify({
+          donationId: donationIdToUse,
+          orderId: orderIdToUse,
+          transactionId: transactionIdToUse
         })
       });
 
@@ -269,17 +629,7 @@ export function PaymentModal({
       }
 
       const donationAmount = Number(amount);
-      setSuccessMessage(`Simulasi donasi Rp ${donationAmount.toLocaleString('id-ID')} berhasil diproses (metode: ${paymentMethod})`);
-      onDonationSuccess?.(donationAmount, {
-        name: isAnonymous ? 'Anonymous' : donorName,
-        message: donorMessage
-      });
-      setStep('success');
-      
-      setTimeout(() => {
-        onClose();
-        resetForm();
-      }, 3000);
+      completeSuccessfulPayment(donationAmount, `Donasi Rp ${donationAmount.toLocaleString('id-ID')} berhasil diproses (metode: ${paymentMethod})`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Pembayaran gagal');
       setStep('error');
@@ -476,34 +826,18 @@ export function PaymentModal({
 
                 <div className="space-y-3">
                   <label className={`flex w-full items-center gap-4 rounded-xl border px-4 py-4 cursor-pointer transition-all ${paymentMethod === 'ewallet' ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}>
-                    <input type="radio" name="method" value="ewallet" checked={paymentMethod === 'ewallet'} onChange={() => setPaymentMethod('ewallet')} className="h-4 w-4 shrink-0 accent-blue-600" />
+                    <input type="radio" name="method" value="ewallet" checked={paymentMethod === 'ewallet'} onChange={() => handlePaymentMethodChange('ewallet')} className="h-4 w-4 shrink-0 accent-blue-600" />
                     <div className="min-w-0 flex-1">
                       <div className="text-base font-semibold text-slate-900">E-Wallet</div>
-                      <div className="mt-0.5 text-sm text-slate-500">GoPay, OVO, DANA, ShopeePay</div>
+                      <div className="mt-0.5 text-sm text-slate-500">GoPay, OVO, Dana, ShopeePay</div>
                     </div>
                   </label>
 
                   <label className={`flex w-full items-center gap-4 rounded-xl border px-4 py-4 cursor-pointer transition-all ${paymentMethod === 'virtual_account' ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}>
-                    <input type="radio" name="method" value="virtual_account" checked={paymentMethod === 'virtual_account'} onChange={() => setPaymentMethod('virtual_account')} className="h-4 w-4 shrink-0 accent-blue-600" />
+                    <input type="radio" name="method" value="virtual_account" checked={paymentMethod === 'virtual_account'} onChange={() => handlePaymentMethodChange('virtual_account')} className="h-4 w-4 shrink-0 accent-blue-600" />
                     <div className="min-w-0 flex-1">
                       <div className="text-base font-semibold text-slate-900">Virtual Account</div>
                       <div className="mt-0.5 text-sm text-slate-500">BCA, Mandiri, BNI, BRI</div>
-                    </div>
-                  </label>
-
-                  <label className={`flex w-full items-center gap-4 rounded-xl border px-4 py-4 cursor-pointer transition-all ${paymentMethod === 'bank_transfer' ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}>
-                    <input type="radio" name="method" value="bank_transfer" checked={paymentMethod === 'bank_transfer'} onChange={() => setPaymentMethod('bank_transfer')} className="h-4 w-4 shrink-0 accent-blue-600" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-base font-semibold text-slate-900">Bank Transfer</div>
-                      <div className="mt-0.5 text-sm text-slate-500">Transfer langsung dari rekening bank</div>
-                    </div>
-                  </label>
-
-                  <label className={`flex w-full items-center gap-4 rounded-xl border px-4 py-4 cursor-pointer transition-all ${paymentMethod === 'card' ? 'border-blue-600 bg-blue-50 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50'}`}>
-                    <input type="radio" name="method" value="card" checked={paymentMethod === 'card'} onChange={() => setPaymentMethod('card')} className="h-4 w-4 shrink-0 accent-blue-600" />
-                    <div className="min-w-0 flex-1">
-                      <div className="text-base font-semibold text-slate-900">Kartu Kredit/Debit</div>
-                      <div className="mt-0.5 text-sm text-slate-500">Visa, Mastercard, dan sejenisnya</div>
                     </div>
                   </label>
                 </div>
@@ -541,10 +875,138 @@ export function PaymentModal({
                   disabled={loading}
                   className="flex-1 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed font-medium flex items-center justify-center gap-2"
                 >
-                  {loading ? <Loader className="w-4 h-4 animate-spin" /> : <><CreditCard className="w-4 h-4" />{isDemoPaymentMode ? 'Simulasikan Pembayaran' : 'Bayar dengan Midtrans'}</>}
+                  {loading ? <Loader className="w-4 h-4 animate-spin" /> : <><CreditCard className="w-4 h-4" />Bayar</>}
                 </button>
               </div>
             </form>
+          )}
+
+          {step === 'pending' && (
+            <div className="py-2 space-y-5">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-amber-50 rounded-full flex items-center justify-center mx-auto mb-4 border border-amber-200">
+                  <Clock3 className="w-8 h-8 text-amber-600" />
+                </div>
+                <h3 className="font-semibold text-xl text-slate-900 mb-2">
+                  Pembayaran Pending
+                </h3>
+                <p className="text-slate-600">
+                  {pendingMessage || 'Pembayaran Anda tercatat sebagai pending. Silakan selesaikan pembayaran di channel yang dipilih.'}
+                </p>
+              </div>
+
+              <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 space-y-3 text-sm text-slate-700">
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-slate-500">Order ID</span>
+                  <span className="font-medium text-slate-900 text-right break-all">{orderId || '-'}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-slate-500">Metode</span>
+                  <span className="font-medium text-slate-900">{paymentMethod === 'virtual_account' ? 'Virtual Account' : 'E-Wallet'}</span>
+                </div>
+                <div className="flex items-center justify-between gap-4">
+                  <span className="text-slate-500">Status</span>
+                  <span className="font-medium text-amber-700">Menunggu pembayaran</span>
+                </div>
+              </div>
+
+              {paymentMethod === 'virtual_account' && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                  <h4 className="font-semibold text-slate-900">Langkah pembayaran VA</h4>
+                  <ol className="list-decimal pl-5 space-y-2 text-sm text-slate-600">
+                    <li>Buka m-banking, internet banking, atau ATM.</li>
+                    <li>Pilih menu transfer ke Virtual Account.</li>
+                    <li>Masukkan nomor VA yang ditampilkan di aplikasi Midtrans.</li>
+                    <li>Selesaikan pembayaran sebelum batas waktu habis.</li>
+                  </ol>
+                </div>
+              )}
+
+              {paymentMethod === 'ewallet' && (
+                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 space-y-3">
+                  <h4 className="font-semibold text-slate-900">Langkah pembayaran E-Wallet</h4>
+                  <ol className="list-decimal pl-5 space-y-2 text-sm text-slate-600">
+                    <li>Buka aplikasi e-wallet yang dipilih.</li>
+                    <li>Lanjutkan pembayaran dari notifikasi atau halaman yang terbuka.</li>
+                    <li>Konfirmasi pembayaran sampai status berubah menjadi sukses.</li>
+                  </ol>
+                  {(pendingDetails?.redirect_url || pendingDetails?.url) && (
+                    <a
+                      href={String(pendingDetails.redirect_url || pendingDetails.url)}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="inline-flex items-center gap-2 text-sm font-medium text-blue-700 hover:text-blue-800"
+                    >
+                      Buka halaman pembayaran
+                      <ExternalLink className="w-4 h-4" />
+                    </a>
+                  )}
+                </div>
+              )}
+
+              {pendingDetails?.va_numbers && Array.isArray(pendingDetails.va_numbers) && pendingDetails.va_numbers.length > 0 && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-4 space-y-3">
+                  <h4 className="font-semibold text-slate-900">Nomor Virtual Account</h4>
+                  <div className="space-y-2">
+                    {pendingDetails.va_numbers.map((item, index) => (
+                      <div key={`${String(item?.bank || 'bank')}-${index}`} className="flex items-center justify-between rounded-xl bg-slate-50 px-4 py-3 text-sm">
+                        <span className="font-medium text-slate-700">{String(item?.bank || 'Bank').toUpperCase()}</span>
+                        <span className="font-semibold text-slate-900 break-all">{String(item?.va_number || '-')}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onNavigateToContinuePayment?.({
+                    donationId: donationId || 0,
+                    orderId: orderId || '',
+                    campaignTitle: campaignTitle || '',
+                    amount: Number(amount || 0),
+                    method: paymentMethod,
+                    redirectUrl: pendingDetails?.redirect_url ? String(pendingDetails.redirect_url) : pendingDetails?.url ? String(pendingDetails.url) : undefined
+                  });
+                }}
+                className="inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-blue-200 bg-blue-50 px-5 py-4 text-sm font-semibold text-blue-700 transition hover:bg-blue-100"
+              >
+                <ExternalLink className="h-4 w-4" />
+                Buka Halaman Lanjutkan Pembayaran
+              </button>
+
+              {error && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                  {error}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button
+                  onClick={onClose}
+                  className="flex-1 py-3 border border-slate-300 text-slate-700 rounded-lg hover:bg-slate-50"
+                >
+                  Tutup
+                </button>
+                <button
+                  onClick={checkPendingStatus}
+                  disabled={checkingStatus}
+                  className="flex-1 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed font-medium flex items-center justify-center gap-2"
+                >
+                  {checkingStatus ? <Loader className="w-4 h-4 animate-spin" /> : <><RefreshCw className="w-4 h-4" />Cek Status</>}
+                </button>
+              </div>
+
+              <button
+                onClick={cancelPendingPayment}
+                disabled={checkingStatus}
+                className="w-full py-3 border border-red-200 text-red-700 rounded-lg hover:bg-red-50 disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed font-medium"
+              >
+                Batalkan Pembayaran
+              </button>
+            </div>
           )}
 
           {step === 'success' && (
