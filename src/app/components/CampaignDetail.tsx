@@ -107,6 +107,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   })();
   const [activeTab, setActiveTab] = useState<'story' | 'transparency' | 'donors'>('story');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [showShareMenu, setShowShareMenu] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(campaign.title);
   const [editDescription, setEditDescription] = useState(campaign.description);
@@ -264,6 +265,54 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
         </div>
       </div>
 
+      {/* Rejection Notification Banner */}
+      {campaign.status === 'rejected' && (
+        <div className="bg-red-50 border-b-2 border-red-200 px-4 sm:px-6 lg:px-8 py-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-start gap-4">
+              <div className="text-red-600 flex-shrink-0 mt-0.5">
+                <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-red-800 mb-1">Kampanye Ditolak</h3>
+                <p className="text-red-700 mb-3">
+                  Kampanye Anda telah ditolak oleh tim verifikasi. Silakan periksa data kampanye dan coba edit untuk perbaikan, kemudian ajukan ulang untuk verifikasi.
+                </p>
+                <button
+                  onClick={() => setIsEditing(true)}
+                  className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium text-sm"
+                >
+                  Edit Kampanye untuk Perbaikan
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pending Notification Banner */}
+      {campaign.status === 'pending' && canEdit && (
+        <div className="bg-amber-50 border-b-2 border-amber-200 px-4 sm:px-6 lg:px-8 py-4">
+          <div className="max-w-7xl mx-auto">
+            <div className="flex items-start gap-4">
+              <div className="text-amber-600 flex-shrink-0 mt-0.5">
+                <svg className="h-6 w-6" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-amber-800 mb-1">Menunggu Verifikasi</h3>
+                <p className="text-amber-700">
+                  Kampanye Anda sedang dalam proses verifikasi oleh tim kami. Anda akan menerima notifikasi setelah verifikasi selesai (biasanya 24-48 jam).
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="grid lg:grid-cols-3 gap-8">
           <div className="lg:col-span-2 space-y-6">
@@ -346,12 +395,9 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                       <div />
                     </div>
                     <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Deskripsi Singkat</label>
-                      <textarea className="w-full rounded-lg border border-gray-300 px-3 py-2" rows={3} value={editDescription} onChange={(event) => setEditDescription(event.target.value)} />
-                    </div>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1">Cerita Lengkap</label>
-                      <textarea className="w-full rounded-lg border border-gray-300 px-3 py-2" rows={5} value={editStory} onChange={(event) => setEditStory(event.target.value)} />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Cerita & Deskripsi Kampanye</label>
+                      <textarea className="w-full rounded-lg border border-gray-300 px-3 py-2" rows={8} placeholder="Ceritakan kisah kampanye Anda, mengapa butuh bantuan, dan bagaimana dana akan digunakan. Tulislah dengan detail dan jelas agar donatur memahami kebutuhan Anda." value={editStory} onChange={(event) => setEditStory(event.target.value)} />
+                      <p className="mt-2 text-xs text-gray-600">Tuliskan cerita lengkap dalam format paragraf. Ini akan ditampilkan sebagai deskripsi utama kampanye Anda.</p>
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-gray-700 mb-1">Gambar Kampanye (URL)</label>
@@ -501,10 +547,14 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                   </div>
 
                   {activeTab === 'story' && (
-                    <div className="prose max-w-none">
-                      <p className="text-gray-700 whitespace-pre-line leading-relaxed">
-                        {campaign.story}
-                      </p>
+                    <div className="prose prose-lg max-w-none">
+                      <div className="space-y-4 text-gray-700 leading-relaxed">
+                        {campaign.story.split('\n\n').map((paragraph, idx) => (
+                          <p key={idx} className="text-base">
+                            {paragraph}
+                          </p>
+                        ))}
+                      </div>
                     </div>
                   )}
 
@@ -629,10 +679,37 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                 Donasi Sekarang
               </button>
 
-              <button onClick={() => { navigator.clipboard.writeText(`${window.location.origin}/?campaign=${campaign.id}`); alert('Link kampanye disalin ke clipboard'); }} className="w-full py-3 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2">
+              <button onClick={() => setShowShareMenu(!showShareMenu)} className="w-full py-3 border border-gray-300 rounded-lg hover:bg-gray-50 flex items-center justify-center gap-2 relative">
                 <Share2 className="w-5 h-5" />
                 Bagikan Kampanye
               </button>
+
+              {/* Share Menu */}
+              <div className="relative mt-2">
+                {showShareMenu && (
+                  <div className="absolute bottom-full mb-2 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 p-3 grid grid-cols-3 gap-2">
+                    {getShareOptions(campaign).map((option) => (
+                      <button
+                        key={option.name}
+                        onClick={() => {
+                          if (option.isCopy) {
+                            navigator.clipboard.writeText(option.url);
+                            alert('Link disalin!');
+                          } else {
+                            window.open(option.url, '_blank', 'width=600,height=400');
+                          }
+                          setShowShareMenu(false);
+                        }}
+                        className={`p-2 text-center text-sm font-medium rounded hover:bg-gray-100 ${option.color}`}
+                        title={option.name}
+                      >
+                        <div className="text-lg">{option.icon}</div>
+                        <div className="text-xs mt-1">{option.name}</div>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
               <div className="mt-6 pt-6 border-t border-gray-200">
                 <p className="text-sm text-gray-600 mb-2">Penggalang Dana:</p>
@@ -659,9 +736,78 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
 // add share functionality below component export
 export function shareCampaign(campaign: { id: number; title: string }) {
   const url = `${window.location.origin}/?campaign=${campaign.id}`;
+  const encodedUrl = encodeURIComponent(url);
+  const encodedTitle = encodeURIComponent(campaign.title);
+  const text = encodeURIComponent(`Bantu kampanye "${campaign.title}" di BantuSesama. Setiap rupiah sangat membantu! 🙏`);
+
+  // Try native share first
   if ((navigator as any).share) {
-    try { (navigator as any).share({ title: campaign.title, url }); return; } catch (e) { /* ignore */ }
+    try {
+      (navigator as any).share({ title: campaign.title, text: `Bantu kampanye "${campaign.title}"`, url });
+      return;
+    } catch (e) {
+      // ignore
+    }
   }
-  navigator.clipboard.writeText(url);
-  alert('Link kampanye disalin ke clipboard');
+
+  // Fallback: show share options
+  const shareOptions = {
+    whatsapp: `https://wa.me/?text=${text}%20${encodedUrl}`,
+    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedTitle}`,
+    twitter: `https://twitter.com/intent/tweet?text=${text}&url=${encodedUrl}`,
+    telegram: `https://t.me/share/url?url=${encodedUrl}&text=${text}`,
+    email: `mailto:?subject=${encodedTitle}&body=Bantulah kampanye "${campaign.title}" di BantuSesama: ${url}`
+  };
+
+  // Copy to clipboard as default
+  navigator.clipboard.writeText(url).then(() => {
+    alert('Link kampanye telah disalin. Bagikan ke teman-teman Anda!\n\nAtau gunakan:\n✓ WhatsApp\n✓ Facebook\n✓ Twitter\n✓ Telegram\n✓ Email');
+  });
+}
+
+export function getShareOptions(campaign: { id: number; title: string }) {
+  const url = `${window.location.origin}/?campaign=${campaign.id}`;
+  const encodedUrl = encodeURIComponent(url);
+  const encodedTitle = encodeURIComponent(campaign.title);
+  const text = encodeURIComponent(`Bantu kampanye "${campaign.title}" di BantuSesama. Setiap rupiah sangat membantu! 🙏`);
+
+  return [
+    {
+      name: 'WhatsApp',
+      icon: '💬',
+      url: `https://wa.me/?text=${text}%20${encodedUrl}`,
+      color: 'hover:text-green-600'
+    },
+    {
+      name: 'Facebook',
+      icon: '👍',
+      url: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedTitle}`,
+      color: 'hover:text-blue-600'
+    },
+    {
+      name: 'Twitter',
+      icon: '🐦',
+      url: `https://twitter.com/intent/tweet?text=${text}&url=${encodedUrl}`,
+      color: 'hover:text-blue-400'
+    },
+    {
+      name: 'Telegram',
+      icon: '✈️',
+      url: `https://t.me/share/url?url=${encodedUrl}&text=${text}`,
+      color: 'hover:text-blue-500'
+    },
+    {
+      name: 'Email',
+      icon: '✉️',
+      url: `mailto:?subject=${encodedTitle}&body=Bantulah kampanye "${campaign.title}" di BantuSesama: ${url}`,
+      color: 'hover:text-red-600'
+    },
+    {
+      name: 'Salin Link',
+      icon: '🔗',
+      url: url,
+      isCopy: true,
+      color: 'hover:text-gray-600'
+    }
+  ];
 }

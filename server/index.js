@@ -8,6 +8,7 @@ const { sequelize } = require('./models');
 const authRoutes = require('./routes/auth');
 const campaignRoutes = require('./routes/campaigns');
 const paymentRoutes = require('./routes/payments');
+const chatbotRoutes = require('./routes/chatbot');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -68,6 +69,7 @@ app.get('/health', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/payments', paymentRoutes);
+app.use('/api/chatbot', chatbotRoutes);
 
 const PORT = process.env.PORT || 4000;
 

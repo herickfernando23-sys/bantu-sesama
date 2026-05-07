@@ -1,7 +1,59 @@
 import { useState } from 'react';
 import { Upload } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
 
 const apiBaseUrl = String(import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
+
+// Default image placeholder
+const DEFAULT_CAMPAIGN_IMAGE = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 400 400%22%3E%3Crect fill=%22%23e5e7eb%22 width=%22400%22 height=%22400%22/%3E%3Ctext x=%2250%25%22 y=%2250%25%22 font-size=%2240%22 font-weight=%22bold%22 text-anchor=%22middle%22 dy=%22.3em%22 fill=%22%239ca3af%22 font-family=%22Arial%22%3ENo Image%3C/text%3E%3C/svg%3E';
+
+// Compress image function
+const compressImage = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new Image();
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        let width = img.width;
+        let height = img.height;
+
+        // Max dimensions
+        const maxWidth = 800;
+        const maxHeight = 600;
+
+        if (width > height) {
+          if (width > maxWidth) {
+            height = Math.round((height * maxWidth) / width);
+            width = maxWidth;
+          }
+        } else {
+          if (height > maxHeight) {
+            width = Math.round((width * maxHeight) / height);
+            height = maxHeight;
+          }
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        ctx?.drawImage(img, 0, 0, width, height);
+        
+        // Compress to JPEG with quality 0.7
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7);
+        resolve(compressedDataUrl);
+      };
+      img.onerror = () => {
+        reject(new Error('Gagal memproses gambar'));
+      };
+    };
+    reader.onerror = () => {
+      reject(new Error('Gagal membaca file gambar'));
+    };
+  });
+};
 
 interface CreateCampaignProps {
   onCreate: (campaign: any) => void;
@@ -100,11 +152,34 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setImagePreview(typeof reader.result === 'string' ? reader.result : '');
-    };
-    reader.readAsDataURL(file);
+    // Validate file size (max 5MB)
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Ukuran gambar terlalu besar. Maksimal 5MB.');
+      setSelectedImage(null);
+      setImagePreview('');
+      return;
+    }
+
+    // Validate file type
+    if (!['image/jpeg', 'image/png', 'image/webp', 'image/gif'].includes(file.type)) {
+      toast.error('Format gambar tidak didukung. Gunakan JPG, PNG, WebP, atau GIF.');
+      setSelectedImage(null);
+      setImagePreview('');
+      return;
+    }
+
+    // Compress and preview
+    compressImage(file)
+      .then((compressedDataUrl) => {
+        setImagePreview(compressedDataUrl);
+        toast.success('Gambar berhasil dikompres dan siap diunggah');
+      })
+      .catch((err) => {
+        toast.error('Gagal memproses gambar. Silakan coba gambar lain.');
+        console.error(err);
+        setSelectedImage(null);
+        setImagePreview('');
+      });
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) => {
@@ -130,23 +205,51 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
 
     try {
       if (!user) {
-        showError('Silakan login atau daftar terlebih dahulu untuk membuat kampanye');
+        toast.error('Silakan login atau daftar terlebih dahulu untuk membuat kampanye');
         setLoading(false);
         return;
       }
 
-      if (!formData.title || !formData.description || !formData.target || !formData.location) {
-        showError('Semua field harus diisi');
+      // Validate all required fields
+      if (!formData.title.trim()) {
+        toast.error('Judul kampanye tidak boleh kosong');
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.description.trim()) {
+        toast.error('Deskripsi singkat tidak boleh kosong');
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.location) {
+        toast.error('Lokasi tidak boleh kosong');
+        setLoading(false);
+        return;
+      }
+
+      if (!formData.target) {
+        toast.error('Target dana tidak boleh kosong');
         setLoading(false);
         return;
       }
 
       const targetAmount = parseInt(formData.target);
       if (isNaN(targetAmount) || targetAmount <= 0) {
-        showError('Target dana harus berupa angka positif');
+        toast.error('Target dana harus berupa angka positif');
         setLoading(false);
         return;
       }
+
+      if (targetAmount < 100000) {
+        toast.error('Target dana minimal Rp 100.000');
+        setLoading(false);
+        return;
+      }
+
+      // Use default image if no image provided
+      const campaignImage = imagePreview || DEFAULT_CAMPAIGN_IMAGE;
 
       const response = await fetch(`${apiBaseUrl}/api/campaigns`, {
         method: 'POST',
@@ -161,7 +264,7 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
           organizer: user.name,
           location: formData.location,
           category: formData.category,
-          image: imagePreview || 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+          image: campaignImage,
           status: 'pending',
           daysLeft: 30,
           fullDescription: formData.fullDescription || formData.description
@@ -170,7 +273,8 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
 
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
-        throw new Error(body.error || 'Gagal membuat kampanye');
+        const errorMsg = body.error || 'Gagal membuat kampanye. Silakan coba lagi.';
+        throw new Error(errorMsg);
       }
 
       const createdCampaign = await response.json();
@@ -180,7 +284,7 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
         title: createdCampaign.title,
         description: createdCampaign.description,
         fullDescription: createdCampaign.fullDescription || formData.fullDescription || formData.description,
-        image: createdCampaign.image || imagePreview || 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+        image: createdCampaign.image || campaignImage || DEFAULT_CAMPAIGN_IMAGE,
         location: createdCampaign.location || formData.location,
         creatorEmail: createdCampaign.creatorEmail || user.email,
         target: targetAmount,
@@ -209,10 +313,12 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
         fullDescription: ''
       });
       setSelectedImage(null);
+      setImagePreview('');
 
-      alert('Kampanye berhasil dibuat dan menunggu verifikasi admin.');
+      toast.success('Kampanye berhasil dibuat dan menunggu verifikasi admin');
     } catch (err) {
-      showError('Terjadi kesalahan saat membuat kampanye');
+      const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan saat membuat kampanye (upload gambar). Silakan coba lagi atau gunakan gambar dengan ukuran lebih kecil.';
+      toast.error(errorMessage);
       console.error(err);
     } finally {
       setLoading(false);
@@ -391,6 +497,7 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
       >
         {loading ? 'Membuat Kampanye...' : 'Buat Kampanye'}
       </button>
+      <Toaster position="top-center" richColors />
     </form>
   );
 }

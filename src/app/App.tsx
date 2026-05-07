@@ -107,6 +107,7 @@ const registeredUsersKey = 'bantusesama-registered-users';
 const adminSessionKey = 'bantusesama-admin-session';
 const withdrawalRequestsKey = 'bantusesama-withdrawal-requests';
 const pendingPaymentsKey = 'bantusesama-pending-payments';
+const userSessionKey = 'bantusesama-user-session';
 
 const loadRegisteredUsersFromStorage = () => {
   if (typeof window === 'undefined') {
@@ -132,6 +133,31 @@ const loadAdminSessionFromStorage = () => {
     return raw ? (JSON.parse(raw) as AppUser) : null;
   } catch {
     return null;
+  }
+};
+
+const loadUserSessionFromStorage = () => {
+  if (typeof window === 'undefined') {
+    return null;
+  }
+
+  try {
+    const raw = window.localStorage.getItem(userSessionKey);
+    return raw ? (JSON.parse(raw) as AppUser) : null;
+  } catch {
+    return null;
+  }
+};
+
+const saveUserSessionToStorage = (user: AppUser | null) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  if (user) {
+    window.localStorage.setItem(userSessionKey, JSON.stringify(user));
+  } else {
+    window.localStorage.removeItem(userSessionKey);
   }
 };
 
@@ -301,6 +327,7 @@ function InfoPage({ page, onNavigate, onHome }: { page: InfoPageKey; onNavigate:
 
 export default function App() {
   const persistedAdminUser = loadAdminSessionFromStorage();
+  const persistedUser = loadUserSessionFromStorage();
   const initialPage: Page = window.location.pathname.startsWith('/admin')
     ? (persistedAdminUser ? 'admin' : 'admin-login')
     : null;
@@ -308,7 +335,7 @@ export default function App() {
   const [selectedCategory, setSelectedCategory] = useState('Semua Kategori');
   const [sortBy, setSortBy] = useState('Terbaru');
   const [page, setPage] = useState<Page>(initialPage);
-  const [user, setUser] = useState<AppUser | null>(null);
+  const [user, setUser] = useState<AppUser | null>(persistedUser);
   const [adminUser, setAdminUser] = useState<AppUser | null>(persistedAdminUser);
   const [registeredUsers, setRegisteredUsers] = useState<StoredUser[]>(() => loadRegisteredUsersFromStorage());
   const [deletedUserEmails, setDeletedUserEmails] = useState<string[]>([]);
@@ -775,6 +802,11 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
         setAdminUser(loadAdminSessionFromStorage());
       }
 
+      if (event.key === userSessionKey) {
+        const storedUser = loadUserSessionFromStorage();
+        setUser(storedUser);
+      }
+
       if (event.key === registeredUsersKey) {
         setRegisteredUsers(loadRegisteredUsersFromStorage());
       }
@@ -837,6 +869,14 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
     window.localStorage.setItem(pendingPaymentsKey, JSON.stringify(pendingPayments));
   }, [pendingPayments]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    saveUserSessionToStorage(user);
+  }, [user]);
 
   const visiblePendingPayments = user?.email
     ? pendingPayments.filter((payment) => !payment.ownerEmail || payment.ownerEmail === user.email)

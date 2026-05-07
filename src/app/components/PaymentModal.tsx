@@ -267,6 +267,8 @@ export function PaymentModal({
 
   if (!isOpen) return null;
 
+  const MIN_DONATION = 10000; // Minimum 10k
+  const MAX_DONATION = 100000000; // Maximum 100 million
   const quickAmounts = [50000, 100000, 250000, 500000, 1000000];
 
   const handleIdentityNext = () => {
@@ -293,8 +295,13 @@ export function PaymentModal({
   // will be created when the user clicks "Bayar" so the selected
   // payment method is used to generate the correct token.
   const handleCreatePaymentIntent = async () => {
-    if (!amount || Number(amount) < 10000) {
-      setError('Minimal donasi Rp 10.000');
+    if (!amount || Number(amount) < MIN_DONATION) {
+      setError(`Minimal donasi Rp ${formatNumberWithSeparators(String(MIN_DONATION))}`);
+      return;
+    }
+
+    if (Number(amount) > MAX_DONATION) {
+      setError(`Maksimal donasi Rp ${formatNumberWithSeparators(String(MAX_DONATION))}`);
       return;
     }
 
@@ -729,6 +736,9 @@ export function PaymentModal({
               <div className="mb-6">
                 <label className="block text-sm font-medium text-slate-700 mb-2">
                   Nominal Donasi
+                  <span className="text-xs text-slate-500 font-normal">
+                    {` (Rp ${formatNumberWithSeparators(String(MIN_DONATION))} - Rp ${formatNumberWithSeparators(String(MAX_DONATION))})`}
+                  </span>
                 </label>
                 <div className="relative">
                   <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500">
@@ -762,7 +772,13 @@ export function PaymentModal({
                   <input
                     type="checkbox"
                     checked={isRecurring}
-                    onChange={(e) => setIsRecurring(e.target.checked)}
+                    onChange={(e) => {
+                      if (e.target.checked && !user?.email) {
+                        alert('Anda harus login terlebih dahulu untuk menggunakan fitur donasi rutin');
+                        return;
+                      }
+                      setIsRecurring(e.target.checked);
+                    }}
                     className="mt-1 w-4 h-4 text-blue-600 rounded focus:ring-blue-600"
                   />
                   <div>
@@ -772,6 +788,7 @@ export function PaymentModal({
                     </div>
                     <p className="text-sm text-amber-700">
                       Donasi Anda akan otomatis dilakukan setiap bulan untuk membantu berkelanjutan
+                      {!user?.email && <span className="block mt-1 text-red-700 font-medium">*Memerlukan akun login</span>}
                     </p>
                   </div>
                 </label>
@@ -797,7 +814,7 @@ export function PaymentModal({
                 </button>
                 <button
                   onClick={handleCreatePaymentIntent}
-                  disabled={!amount || Number(amount) < 10000 || loading}
+                  disabled={!amount || Number(amount) < MIN_DONATION || Number(amount) > MAX_DONATION || loading}
                   className="flex-1 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-slate-200 disabled:text-slate-400 disabled:cursor-not-allowed font-medium"
                 >
                   {loading ? <Loader className="w-4 h-4 animate-spin mx-auto" /> : 'Lanjut ke Pembayaran'}

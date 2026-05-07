@@ -8,6 +8,8 @@ interface Message {
   timestamp: Date;
 }
 
+const apiBaseUrl = String(import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
+
 export function Chatbot() {
   const [isOpen, setIsOpen] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
@@ -19,35 +21,34 @@ export function Chatbot() {
     }
   ]);
   const [inputText, setInputText] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
 
-  const generateBotResponse = (userMessage: string): string => {
-    const lowerMessage = userMessage.toLowerCase();
+  const fetchBotResponse = async (userMessage: string): Promise<string> => {
+    try {
+      const response = await fetch(
+        `${apiBaseUrl}/api/chatbot/response?message=${encodeURIComponent(userMessage)}`,
+        {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        }
+      );
 
-    if (lowerMessage.includes('cara donasi') || lowerMessage.includes('cara berdonasi')) {
-      return 'Untuk berdonasi, Anda bisa:\n1. Pilih kampanye\n2. Klik "Donasi Sekarang"\n3. Masukkan nominal\n4. Pilih pembayaran\n5. Selesaikan pembayaran';
+      if (!response.ok) {
+        throw new Error('Gagal mendapatkan respons dari chatbot');
+      }
+
+      const data = await response.json();
+      return data.response || 'Maaf, terjadi kesalahan. Silakan coba lagi.';
+    } catch (error) {
+      console.error('Chatbot API error:', error);
+      return 'Maaf, terjadi kesalahan saat memproses pertanyaan Anda. Silakan hubungi tim support kami atau coba lagi nanti.';
     }
-
-    if (lowerMessage.includes('transparansi')) {
-      return 'Semua kampanye memiliki laporan transparansi dana yang bisa Anda lihat di tab "Transparansi".';
-    }
-
-    if (lowerMessage.includes('aman')) {
-      return 'Platform kami aman:\n✅ Kampanye diverifikasi\n✅ Payment gateway terpercaya\n✅ Data dilindungi';
-    }
-
-    if (lowerMessage.includes('kampanye')) {
-      return 'Untuk membuat kampanye:\n1. Klik "Mulai Kampanye"\n2. Isi data\n3. Tunggu verifikasi';
-    }
-
-    if (lowerMessage.includes('halo') || lowerMessage.includes('hi')) {
-      return 'Halo! Ada yang bisa saya bantu? 😊';
-    }
-
-    return 'Saya bisa bantu soal donasi, kampanye, transparansi, dan keamanan. Silakan tanya ya!';
   };
 
-  const handleSendMessage = () => {
-    if (!inputText.trim()) return;
+  const handleSendMessage = async () => {
+    if (!inputText.trim() || isLoading) return;
 
     const userMessage: Message = {
       id: messages.length + 1,
@@ -58,16 +59,25 @@ export function Chatbot() {
 
     setMessages(prev => [...prev, userMessage]);
     setInputText('');
+    setIsLoading(true);
 
-    setTimeout(() => {
-      const botResponse: Message = {
-        id: messages.length + 2,
-        text: generateBotResponse(inputText),
-        sender: 'bot',
-        timestamp: new Date()
-      };
-      setMessages(prev => [...prev, botResponse]);
-    }, 500);
+    try {
+      const botResponseText = await fetchBotResponse(inputText);
+      
+      setTimeout(() => {
+        const botResponse: Message = {
+          id: messages.length + 2,
+          text: botResponseText,
+          sender: 'bot',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, botResponse]);
+        setIsLoading(false);
+      }, 300);
+    } catch (error) {
+      console.error('Error sending message:', error);
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -142,15 +152,21 @@ export function Chatbot() {
                 type="text"
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-                placeholder="Ketik pesan..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600"
+                onKeyDown={(e) => e.key === 'Enter' && !isLoading && handleSendMessage()}
+                placeholder={isLoading ? 'Menunggu respons...' : 'Ketik pesan...'}
+                disabled={isLoading}
+                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-600 disabled:opacity-50"
               />
               <button
                 onClick={handleSendMessage}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                disabled={isLoading}
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:bg-gray-400 transition"
               >
-                <Send className="w-5 h-5" />
+                {isLoading ? (
+                  <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                ) : (
+                  <Send className="w-5 h-5" />
+                )}
               </button>
             </div>
           </div>
