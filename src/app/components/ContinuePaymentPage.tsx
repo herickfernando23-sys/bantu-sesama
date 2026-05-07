@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ExternalLink, Loader, RefreshCw, ShieldAlert, CheckCircle2, Clock3, XCircle, Copy } from 'lucide-react';
 
 const apiBaseUrl = String(import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
+const midtransClientKey = String(import.meta.env.VITE_MIDTRANS_CLIENT_KEY || '').trim();
+const viteMidtransIsProduction = String(import.meta.env.VITE_MIDTRANS_IS_PRODUCTION || '').toLowerCase() === 'true';
 const pendingPaymentsKey = 'bantusesama-pending-payments';
 
 type PaymentStatusResponse = {
@@ -31,10 +33,40 @@ type PendingPaymentRecord = {
   campaignTitle: string;
   amount: number;
   method: 'virtual_account' | 'ewallet';
+  transactionToken?: string;
   redirectUrl?: string;
   ownerEmail?: string;
   createdAt: number;
   updatedAt: number;
+};
+
+const ensureSnapLoaded = async () => {
+  if ((window as any).snap) return;
+
+  const existing = document.querySelector('script[data-midtrans-snap="true"]');
+  if (!existing) {
+    const snapUrl = viteMidtransIsProduction
+      ? 'https://app.midtrans.com/snap/snap.js'
+      : 'https://app.sandbox.midtrans.com/snap/snap.js';
+    const script = document.createElement('script');
+    script.src = snapUrl;
+    script.setAttribute('data-client-key', midtransClientKey);
+    script.setAttribute('data-midtrans-snap', 'true');
+    script.async = true;
+    document.body.appendChild(script);
+  }
+
+  return new Promise<void>((resolve, reject) => {
+    let attempts = 0;
+    const max = 100; // ~10s
+    const check = () => {
+      attempts++;
+      if ((window as any).snap) return resolve();
+      if (attempts >= max) return reject(new Error('Timeout: Midtrans Snap SDK tidak siap'));
+      setTimeout(check, 100);
+    };
+    check();
+  });
 };
 
 const readPendingPayments = () => {
@@ -114,35 +146,111 @@ export function ContinuePaymentPage({ onHome, user }: { onHome: () => void; user
   }, []);
 
   const continuePayment = () => {
-    let urlToOpen = query.redirectUrl;
+    (async () => {
+      let urlToOpen = query.redirectUrl;
 
-    console.log('continuePayment - Initial state:', {
-      queryRedirectUrl: query.redirectUrl,
-      queryDonationId: query.donationId
-    });
+      console.log('continuePayment - Initial state:', {
+        queryRedirectUrl: query.redirectUrl,
+        queryDonationId: query.donationId
+      });
 
-    // Fallback: cari di localStorage jika redirectUrl tidak ada di URL
-    if (!urlToOpen && query.donationId) {
-      const pendingPayments = readPendingPayments();
-      console.log('Fallback - Pending payments from localStorage:', pendingPayments);
-      const matchingPayment = pendingPayments.find(
-        (p) => p.donationId === Number(query.donationId)
-      );
-      console.log('Fallback - Matching payment found:', matchingPayment);
-      if (matchingPayment?.redirectUrl) {
-        urlToOpen = matchingPayment.redirectUrl;
+      // Fallback: cari di localStorage jika redirectUrl atau snap token tidak ada di URL
+      if (!urlToOpen && query.donationId) {
+        const pendingPayments = readPendingPayments();
+        console.log('Fallback - Pending payments from localStorage:', pendingPayments);
+        const matchingPayment = pendingPayments.find(
+          (p) => p.donationId === Number(query.donationId)
+        );
+        console.log('Fallback - Matching payment found:', matchingPayment);
+
+        // Jika ada Snap token tersimpan, coba buka kembali popup Snap agar user bisa menyelesaikan pembayaran
+        if (matchingPayment?.transactionToken) {
+          try {
+            setLoading(true);
+            await ensureSnapLoaded();
+            const token = matchingPayment.transactionToken;
+            let callbackFired = false;
+            const snapTimeout = window.setTimeout(() => {
+              if (!callbackFired) {
+                setError('Pembayaran tidak bisa dilanjutkan saat ini. Silakan coba lagi beberapa saat.');
+              }
+              setLoading(false);
+            }, 10000);
+
+            (window as any).snap.pay(token, {
+              onSuccess: async (result: Record<string, unknown>) => {
+                callbackFired = true;
+                clearTimeout(snapTimeout);
+                try {
+                  const response = await fetch(`${apiBaseUrl}/api/payments/confirm`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      donationId: Number(matchingPayment.donationId),
+                      orderId: String(matchingPayment.orderId),
+                      transactionId: String(result.transaction_id || ''),
+                      transactionStatus: String(result.transaction_status || '')
+                    })
+                  });
+
+                  if (response.ok) {
+                    setStatus('succeeded');
+                    setMessage('Pembayaran sudah berhasil tercatat.');
+                    removePendingPayment(matchingPayment.donationId, matchingPayment.orderId);
+                  } else {
+                    const body = await response.json().catch(() => ({}));
+                    throw new Error(body.error || 'Konfirmasi pembayaran gagal');
+                  }
+                } catch (err) {
+                  setError(err instanceof Error ? err.message : 'Konfirmasi pembayaran gagal');
+                } finally {
+                  setLoading(false);
+                }
+              },
+              onPending: (result: Record<string, unknown>) => {
+                callbackFired = true;
+                clearTimeout(snapTimeout);
+                setMessage('Pembayaran masih pending. Silakan selesaikan pembayaran di channel yang dipilih.');
+                setLoading(false);
+              },
+              onError: (res?: Record<string, unknown>) => {
+                callbackFired = true;
+                clearTimeout(snapTimeout);
+                setError('Pembayaran Midtrans gagal. Silakan coba lagi.');
+                setLoading(false);
+              },
+              onClose: () => {
+                callbackFired = true;
+                clearTimeout(snapTimeout);
+                setError('Pembayaran dibatalkan. Silakan coba lagi jika ingin melanjutkan donasi.');
+                setLoading(false);
+              }
+            });
+
+            return;
+          } catch (err) {
+            setLoading(false);
+            console.error('continuePayment - ensureSnapLoaded failed', err);
+            setError('Midtrans Snap SDK tidak siap. Silakan coba lagi beberapa saat.');
+            return;
+          }
+        }
+
+        if (matchingPayment?.redirectUrl) {
+          urlToOpen = matchingPayment.redirectUrl;
+        }
       }
-    }
 
-    console.log('continuePayment - Final urlToOpen:', urlToOpen);
+      console.log('continuePayment - Final urlToOpen:', urlToOpen);
 
-    if (urlToOpen) {
-      console.log('Opening URL:', urlToOpen);
-      window.open(urlToOpen, '_blank', 'noopener,noreferrer');
-      return;
-    }
+      if (urlToOpen) {
+        console.log('Opening URL:', urlToOpen);
+        window.open(urlToOpen, '_blank', 'noopener,noreferrer');
+        return;
+      }
 
-    setError('Link pembayaran belum tersedia. Pastikan Anda membuka halaman ini dari notifikasi atau coba cek status pembayaran terlebih dahulu.');
+      setError('Link pembayaran belum tersedia. Pastikan Anda membuka halaman ini dari notifikasi atau coba cek status pembayaran terlebih dahulu.');
+    })();
   };
 
   const cancelPayment = async () => {

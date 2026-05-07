@@ -117,6 +117,7 @@ type PendingPaymentRecord = {
   campaignTitle: string;
   amount: number;
   method: 'virtual_account' | 'ewallet';
+  transactionToken?: string;
   redirectUrl?: string;
   ownerEmail?: string;
   createdAt: number;
@@ -566,6 +567,7 @@ export function PaymentModal({
                 amount: Number(amount),
                 method: paymentMethod,
                 redirectUrl: redirectUrlValue,
+                transactionToken: tokenToUse,
                 ownerEmail: user.email,
                 createdAt: Date.now(),
                 updatedAt: Date.now()
