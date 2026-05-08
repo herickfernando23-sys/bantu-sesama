@@ -102,12 +102,21 @@ type PendingPaymentRecord = {
   updatedAt: number;
 };
 
+type RecurringDonationRecord = {
+  email: string;
+  campaignTitle: string;
+  amount: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
 const campaignStorageKey = 'bantusesama-campaigns';
 const registeredUsersKey = 'bantusesama-registered-users';
 const adminSessionKey = 'bantusesama-admin-session';
 const withdrawalRequestsKey = 'bantusesama-withdrawal-requests';
 const pendingPaymentsKey = 'bantusesama-pending-payments';
 const userSessionKey = 'bantusesama-user-session';
+const recurringDonationsKey = 'bantusesama-recurring-donors';
 
 const loadRegisteredUsersFromStorage = () => {
   if (typeof window === 'undefined') {
@@ -187,6 +196,28 @@ const loadPendingPaymentsFromStorage = () => {
   } catch {
     return [] as PendingPaymentRecord[];
   }
+};
+
+const loadRecurringDonationsFromStorage = () => {
+  if (typeof window === 'undefined') {
+    return [] as RecurringDonationRecord[];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(recurringDonationsKey);
+    const parsed = raw ? (JSON.parse(raw) as RecurringDonationRecord[]) : [];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [] as RecurringDonationRecord[];
+  }
+};
+
+const getRecurringDonationForEmail = (email?: string | null) => {
+  if (!email) {
+    return null;
+  }
+
+  return loadRecurringDonationsFromStorage().find((record) => record.email.toLowerCase() === email.toLowerCase()) ?? null;
 };
 
 const buildCampaignFingerprint = (campaign: CampaignRecord) => [
@@ -344,6 +375,7 @@ export default function App() {
   const [rejectUndoState, setRejectUndoState] = useState<{ campaignId: number; previousStatus?: CampaignStatus; expiresAt: number } | null>(null);
   const [deletedUserUndoState, setDeletedUserUndoState] = useState<{ email: string; userData: StoredUser | null; removedCampaigns: CampaignRecord[]; expiresAt: number } | null>(null);
   const [undoNow, setUndoNow] = useState(Date.now());
+  const [recurringToggle, setRecurringToggle] = useState(0);
   const [campaignsHydrated, setCampaignsHydrated] = useState(false);
   const [profileEditName, setProfileEditName] = useState('');
   const [profileEditMessage, setProfileEditMessage] = useState('');
@@ -882,6 +914,8 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     ? pendingPayments.filter((payment) => !payment.ownerEmail || payment.ownerEmail === user.email)
     : [];
 
+  const recurringDonationStatus = getRecurringDonationForEmail(user?.email);
+
   const campaignsForDisplay = [...campaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
 
   const donationHistoryForDisplay = campaignsForDisplay.flatMap((campaign) => {
@@ -1309,6 +1343,44 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                     </div>
                     {profileEditMessage && <p className="text-sm text-emerald-600">{profileEditMessage}</p>}
                   </div>
+
+                  {recurringDonationStatus && (
+                    <div className="mt-5 rounded-xl border border-emerald-200 bg-emerald-50 p-4">
+                      <p className="text-sm font-semibold text-emerald-800">Status Donasi Rutin</p>
+                      <p className="mt-1 text-sm text-emerald-700">
+                        Anda adalah donatur rutin aktif untuk {recurringDonationStatus.campaignTitle}.
+                      </p>
+                      <p className="mt-2 text-xs text-emerald-600">
+                        Nominal bulanan: Rp {recurringDonationStatus.amount.toLocaleString('id-ID')}
+                      </p>
+                        <div className="mt-3">
+                          <button
+                            onClick={() => {
+                              if (!user?.email) {
+                                alert('Anda harus login untuk mengelola donasi rutin.');
+                                return;
+                              }
+                              const ok = confirm('Hentikan donasi rutin untuk kampanye ini?');
+                              if (!ok) return;
+                              try {
+                                const raw = localStorage.getItem('bantusesama-recurring-donors') || '[]';
+                                const records: Array<any> = JSON.parse(raw || '[]');
+                                const filtered = records.filter((r) => r.email.toLowerCase() !== user.email.toLowerCase());
+                                localStorage.setItem('bantusesama-recurring-donors', JSON.stringify(filtered));
+                                // force re-render to refresh recurring status
+                                setRecurringToggle((v) => v + 1);
+                                alert('Donasi rutin berhasil dihentikan.');
+                              } catch (err) {
+                                alert('Gagal menghentikan donasi rutin. Coba lagi.');
+                              }
+                            }}
+                            className="mt-3 px-3 py-2 inline-flex items-center gap-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50"
+                          >
+                            Hentikan Donasi Rutin
+                          </button>
+                        </div>
+                    </div>
+                  )}
                 </div>
 
                 {visiblePendingPayments.length > 0 && (

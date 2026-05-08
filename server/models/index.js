@@ -13,6 +13,7 @@ const Campaign = require('./campaign')(sequelize);
 const Donation = require('./donation')(sequelize);
 const Comment = require('./comment')(sequelize);
 const Category = require('./category')(sequelize);
+const ChatbotInteraction = require('./chatbot_interaction')(sequelize);
 
 const CampaignCategory = sequelize.define('CampaignCategory', {}, { timestamps: false });
 
@@ -35,6 +36,10 @@ Comment.belongsTo(User, { foreignKey: 'userId' });
 Campaign.belongsToMany(Category, { through: CampaignCategory });
 Category.belongsToMany(Campaign, { through: CampaignCategory });
 
+// Chatbot interactions
+User.hasMany(ChatbotInteraction, { foreignKey: 'userId' });
+ChatbotInteraction.belongsTo(User, { foreignKey: 'userId' });
+
 module.exports = {
   sequelize,
   User,
@@ -42,5 +47,6 @@ module.exports = {
   Donation,
   Comment,
   Category,
+  ChatbotInteraction,
   CampaignCategory
 };

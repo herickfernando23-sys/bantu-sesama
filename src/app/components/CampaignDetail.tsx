@@ -1,7 +1,7 @@
 import { ImageWithFallback } from './ImageWithFallback';
-import { MapPin, Users, Calendar, Share2, Heart, TrendingUp, Shield, FileText } from 'lucide-react';
+import { MapPin, Users, Calendar, Share2, Heart, TrendingUp, Shield, FileText, Facebook, Twitter, Send, Mail, Link2, MessageCircle } from 'lucide-react';
 import { TransparencyChart } from './TransparencyChart';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { PaymentModal } from './PaymentModal';
 
 interface Campaign {
@@ -45,6 +45,46 @@ interface CampaignDetailProps {
 type AllocationEditorItem = { name: string; value: string; color: string };
 type DisbursementEditorItem = { date: string; amount: string; purpose: string };
 
+const locationOptions = [
+  'Aceh',
+  'Sumatera Utara',
+  'Sumatera Barat',
+  'Riau',
+  'Kepulauan Riau',
+  'Jambi',
+  'Sumatera Selatan',
+  'Kepulauan Bangka Belitung',
+  'Bengkulu',
+  'Lampung',
+  'DKI Jakarta',
+  'Jawa Barat',
+  'Banten',
+  'Jawa Tengah',
+  'DI Yogyakarta',
+  'Jawa Timur',
+  'Bali',
+  'Nusa Tenggara Barat',
+  'Nusa Tenggara Timur',
+  'Kalimantan Barat',
+  'Kalimantan Tengah',
+  'Kalimantan Selatan',
+  'Kalimantan Timur',
+  'Kalimantan Utara',
+  'Sulawesi Utara',
+  'Gorontalo',
+  'Sulawesi Tengah',
+  'Sulawesi Barat',
+  'Sulawesi Selatan',
+  'Sulawesi Tenggara',
+  'Maluku',
+  'Maluku Utara',
+  'Papua',
+  'Papua Barat',
+  'Papua Barat Daya',
+  'Papua Selatan',
+  'Papua Tengah',
+  'Papua Pegunungan'
+];
 const toAllocationEditorItems = (items: Campaign['fundAllocation']): AllocationEditorItem[] => (
   items.length > 0
     ? items.map((item) => ({ name: item.name, value: String(item.value), color: item.color }))
@@ -108,9 +148,11 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   const [activeTab, setActiveTab] = useState<'story' | 'transparency' | 'donors'>('story');
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [showShareMenu, setShowShareMenu] = useState(false);
+  const shareMenuRef = useRef<HTMLDivElement | null>(null);
+  const [isRecurringActive, setIsRecurringActive] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [editError, setEditError] = useState('');
   const [editTitle, setEditTitle] = useState(campaign.title);
-  const [editDescription, setEditDescription] = useState(campaign.description);
   const [editLocation, setEditLocation] = useState(campaign.location);
   const [editTarget, setEditTarget] = useState(String(campaign.target));
   const [editDaysLeft, setEditDaysLeft] = useState(String(campaign.daysLeft));
@@ -162,8 +204,8 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
     : [];
 
   const syncEditState = () => {
+    setEditError('');
     setEditTitle(campaign.title);
-    setEditDescription(campaign.description);
     setEditLocation(campaign.location);
     setEditTarget(String(campaign.target));
     setEditDaysLeft(String(campaign.daysLeft));
@@ -181,6 +223,40 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
     setWithdrawError('');
   }, [campaign.id, campaign.collected]);
 
+  // Close share menu when clicking outside
+  useEffect(() => {
+    function handleOutsideClick(e: MouseEvent) {
+      if (!showShareMenu) return;
+      const target = e.target as Node | null;
+      if (shareMenuRef.current && target && !shareMenuRef.current.contains(target)) {
+        setShowShareMenu(false);
+      }
+    }
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, [showShareMenu]);
+
+  // Check if current user has an active recurring donation for this campaign
+  useEffect(() => {
+    try {
+      if (!user?.email) {
+        setIsRecurringActive(false);
+        return;
+      }
+      const raw = localStorage.getItem('bantusesama-recurring-donors') || '[]';
+      const records: Array<any> = JSON.parse(raw || '[]');
+      const found = records.find((r) => r.email === user.email && Number(r.campaignId) === Number(campaign.id));
+      setIsRecurringActive(Boolean(found));
+    } catch (err) {
+      setIsRecurringActive(false);
+    }
+  }, [user?.email, campaign.id]);
+
   const handleEditImageUpload = (file: File | null) => {
     if (!file) {
       return;
@@ -196,6 +272,13 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   const handleStartEdit = () => {
     syncEditState();
     setIsEditing(true);
+  };
+
+  const showEditError = (message: string) => {
+    setEditError(message);
+    window.requestAnimationFrame(() => {
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
   };
 
   const handleTargetChange = (event: { target: { value: string } }) => {
@@ -231,13 +314,36 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
     const nextAllocations = toCampaignAllocations(editAllocations);
     const nextDisbursements = toCampaignDisbursements(editDisbursements);
 
-    if (!editTitle.trim() || !editDescription.trim() || !editLocation.trim() || !Number.isFinite(nextTarget) || nextTarget <= 0 || !Number.isFinite(nextDaysLeft) || nextDaysLeft < 0) {
+    if (!editTitle.trim()) {
+      showEditError('Judul kampanye harus diisi');
       return;
     }
 
+    if (!editLocation.trim()) {
+      showEditError('Lokasi kampanye harus dipilih');
+      return;
+    }
+
+    if (!Number.isFinite(nextTarget) || nextTarget <= 0) {
+      showEditError('Target dana harus diisi dengan angka yang valid');
+      return;
+    }
+
+    if (!Number.isFinite(nextDaysLeft) || nextDaysLeft < 0) {
+      showEditError('Deadline harus diisi dengan angka yang valid');
+      return;
+    }
+
+    if (!editStory.trim()) {
+      showEditError('Cerita kampanye harus diisi');
+      return;
+    }
+
+    setEditError('');
+
     onUpdateCampaign?.(campaign.id, {
       title: editTitle.trim(),
-      description: editDescription.trim(),
+      description: campaign.description,
       fullDescription: editStory.trim(),
       location: editLocation.trim(),
       category: editCategory.trim(),
@@ -362,6 +468,11 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
 
                 {isEditing && canEdit && (
                   <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-4">
+                    {editError && (
+                      <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+                        {editError}
+                      </div>
+                    )}
                     <div className="grid md:grid-cols-2 gap-4">
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Judul Kampanye</label>
@@ -369,7 +480,12 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Lokasi</label>
-                        <input className="w-full rounded-lg border border-gray-300 px-3 py-2" value={editLocation} onChange={(event) => setEditLocation(event.target.value)} />
+                        <select className="w-full rounded-lg border border-gray-300 px-3 py-2 bg-white" value={editLocation} onChange={(event) => setEditLocation(event.target.value)}>
+                          <option value="" disabled>Pilih lokasi</option>
+                          {locationOptions.map((location) => (
+                            <option key={location} value={location}>{location}</option>
+                          ))}
+                        </select>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700 mb-1">Kategori</label>
@@ -503,8 +619,8 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-3">
-                      <button onClick={handleSaveEdit} className="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700">Simpan Perubahan</button>
-                      <button onClick={() => { syncEditState(); setIsEditing(false); }} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50">Reset</button>
+                      <button type="button" onClick={handleSaveEdit} className="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700">Simpan Perubahan</button>
+                      <button type="button" onClick={() => { syncEditState(); setIsEditing(false); }} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50">Reset</button>
                     </div>
                   </div>
                 )}
@@ -548,9 +664,9 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
 
                   {activeTab === 'story' && (
                     <div className="prose prose-lg max-w-none">
-                      <div className="space-y-4 text-gray-700 leading-relaxed">
+                      <div className="space-y-4 text-gray-700 leading-relaxed break-words">
                         {campaign.story.split('\n\n').map((paragraph, idx) => (
-                          <p key={idx} className="text-base">
+                          <p key={idx} className="text-base break-words">
                             {paragraph}
                           </p>
                         ))}
@@ -622,9 +738,36 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
               <div className={`mb-6 p-4 rounded-lg ${isVerified ? 'bg-blue-50' : campaign.status === 'pending' ? 'bg-amber-50' : 'bg-rose-50'}`}>
                 <div className="flex items-start gap-3">
                   <Shield className={`w-5 h-5 mt-0.5 ${isVerified ? 'text-blue-600' : campaign.status === 'pending' ? 'text-amber-600' : 'text-rose-600'}`} />
-                  <div>
+                  <div className="flex-1">
                     <p className="font-medium text-gray-900 mb-1">Kampanye {statusLabel}</p>
                     <p className="text-sm text-gray-600">{statusDescription}</p>
+                    {isRecurringActive && (
+                      <div className="mt-3">
+                        <button
+                          onClick={() => {
+                            if (!user?.email) {
+                              alert('Anda harus masuk untuk mengelola donasi rutin.');
+                              return;
+                            }
+                            const ok = confirm('Hentikan donasi rutin untuk kampanye ini?');
+                            if (!ok) return;
+                            try {
+                              const raw = localStorage.getItem('bantusesama-recurring-donors') || '[]';
+                              const records: Array<any> = JSON.parse(raw || '[]');
+                              const filtered = records.filter((r) => !(r.email === user.email && Number(r.campaignId) === Number(campaign.id)));
+                              localStorage.setItem('bantusesama-recurring-donors', JSON.stringify(filtered));
+                              setIsRecurringActive(false);
+                              alert('Donasi rutin berhasil dihentikan.');
+                            } catch (err) {
+                              alert('Gagal menghentikan donasi rutin. Coba lagi.');
+                            }
+                          }}
+                          className="mt-2 px-3 py-2 inline-flex items-center gap-2 rounded-lg border border-gray-300 text-sm text-gray-700 hover:bg-gray-50"
+                        >
+                          Hentikan Donasi Rutin
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -687,7 +830,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
               {/* Share Menu */}
               <div className="relative mt-2">
                 {showShareMenu && (
-                  <div className="absolute bottom-full mb-2 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 p-3 grid grid-cols-3 gap-2">
+                  <div ref={shareMenuRef} className="absolute bottom-full mb-2 left-0 right-0 bg-white border border-gray-200 rounded-lg shadow-lg z-10 p-3 grid grid-cols-3 gap-2">
                     {getShareOptions(campaign).map((option) => (
                       <button
                         key={option.name}
@@ -700,10 +843,14 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                           }
                           setShowShareMenu(false);
                         }}
-                        className={`p-2 text-center text-sm font-medium rounded hover:bg-gray-100 ${option.color}`}
+                        className={`p-2 text-center text-sm font-medium rounded hover:bg-gray-50 ${option.bg || ''}`}
                         title={option.name}
                       >
-                        <div className="text-lg">{option.icon}</div>
+                        <div className="text-lg flex items-center justify-center">
+                          <div className={`p-2 rounded-full ${option.iconBg || 'bg-transparent'}`}>
+                            {option.icon}
+                          </div>
+                        </div>
                         <div className="text-xs mt-1">{option.name}</div>
                       </button>
                     ))}
@@ -715,6 +862,33 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                 <p className="text-sm text-gray-600 mb-2">Penggalang Dana:</p>
                 <p className="font-medium text-gray-900">{campaign.organizer}</p>
               </div>
+              {isRecurringActive && (
+                <div className="mt-4">
+                  <button
+                    onClick={() => {
+                      if (!user?.email) {
+                        alert('Anda harus masuk untuk mengelola donasi rutin.');
+                        return;
+                      }
+                      const ok = confirm('Hentikan donasi rutin untuk kampanye ini?');
+                      if (!ok) return;
+                      try {
+                        const raw = localStorage.getItem('bantusesama-recurring-donors') || '[]';
+                        const records: Array<any> = JSON.parse(raw || '[]');
+                        const filtered = records.filter((r) => !(r.email === user.email && Number(r.campaignId) === Number(campaign.id)));
+                        localStorage.setItem('bantusesama-recurring-donors', JSON.stringify(filtered));
+                        setIsRecurringActive(false);
+                        alert('Donasi rutin berhasil dihentikan.');
+                      } catch (err) {
+                        alert('Gagal menghentikan donasi rutin. Coba lagi.');
+                      }
+                    }}
+                    className="w-full mt-3 py-2 border border-gray-300 rounded-lg text-sm text-gray-700 hover:bg-gray-50"
+                  >
+                    Hentikan Donasi Rutin
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -774,40 +948,46 @@ export function getShareOptions(campaign: { id: number; title: string }) {
   return [
     {
       name: 'WhatsApp',
-      icon: '💬',
+      icon: <Send className="w-5 h-5 text-green-600" />,
       url: `https://wa.me/?text=${text}%20${encodedUrl}`,
-      color: 'hover:text-green-600'
+      bg: 'hover:bg-green-50',
+      iconBg: 'bg-green-100'
     },
     {
       name: 'Facebook',
-      icon: '👍',
+      icon: <Facebook className="w-5 h-5 text-blue-600" />,
       url: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedTitle}`,
-      color: 'hover:text-blue-600'
+      bg: 'hover:bg-blue-50',
+      iconBg: 'bg-blue-100'
     },
     {
       name: 'Twitter',
-      icon: '🐦',
+      icon: <Twitter className="w-5 h-5 text-sky-500" />,
       url: `https://twitter.com/intent/tweet?text=${text}&url=${encodedUrl}`,
-      color: 'hover:text-blue-400'
+      bg: 'hover:bg-sky-50',
+      iconBg: 'bg-sky-100'
     },
     {
       name: 'Telegram',
-      icon: '✈️',
+      icon: <MessageCircle className="w-5 h-5 text-blue-500" />,
       url: `https://t.me/share/url?url=${encodedUrl}&text=${text}`,
-      color: 'hover:text-blue-500'
+      bg: 'hover:bg-blue-50',
+      iconBg: 'bg-blue-100'
     },
     {
       name: 'Email',
-      icon: '✉️',
+      icon: <Mail className="w-5 h-5 text-rose-500" />,
       url: `mailto:?subject=${encodedTitle}&body=Bantulah kampanye "${campaign.title}" di BantuSesama: ${url}`,
-      color: 'hover:text-red-600'
+      bg: 'hover:bg-rose-50',
+      iconBg: 'bg-rose-100'
     },
     {
       name: 'Salin Link',
-      icon: '🔗',
+      icon: <Link2 className="w-5 h-5 text-gray-700" />,
       url: url,
       isCopy: true,
-      color: 'hover:text-gray-600'
+      bg: 'hover:bg-gray-50',
+      iconBg: 'bg-gray-100'
     }
   ];
 }

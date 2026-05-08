@@ -101,6 +101,35 @@ const formatNumberWithSeparators = (value: string) => {
   return Number.isFinite(numericValue) ? numericValue.toLocaleString('id-ID') : value;
 };
 
+const recurringDonationsKey = 'bantusesama-recurring-donors';
+
+type RecurringDonationRecord = {
+  email: string;
+  campaignTitle: string;
+  amount: number;
+  createdAt: number;
+  updatedAt: number;
+};
+
+const saveRecurringDonationRecord = (record: RecurringDonationRecord) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    const existing = window.localStorage.getItem(recurringDonationsKey);
+    const parsed = existing ? (JSON.parse(existing) as RecurringDonationRecord[]) : [];
+    const nextRecords = Array.isArray(parsed)
+      ? parsed.filter((item) => item.email.toLowerCase() !== record.email.toLowerCase() || item.campaignTitle !== record.campaignTitle)
+      : [];
+
+    nextRecords.push(record);
+    window.localStorage.setItem(recurringDonationsKey, JSON.stringify(nextRecords));
+  } catch (error) {
+    console.error('Failed to save recurring donation record', error);
+  }
+};
+
 type PendingPaymentDetails = {
   transaction_status?: string;
   status?: string;
@@ -331,7 +360,18 @@ export function PaymentModal({
     }
     setPendingMessage('');
     setPendingDetails(null);
-    setSuccessMessage(message);
+    if (isRecurring && user?.email) {
+      saveRecurringDonationRecord({
+        email: user.email,
+        campaignTitle,
+        amount: paymentAmount,
+        createdAt: Date.now(),
+        updatedAt: Date.now()
+      });
+      setSuccessMessage(`${message}\nAnda terdaftar sebagai donatur rutin bulanan.`);
+    } else {
+      setSuccessMessage(message);
+    }
     onDonationSuccess?.(paymentAmount, {
       name: isAnonymous ? 'Anonymous' : donorName,
       message: donorMessage
@@ -848,7 +888,7 @@ export function PaymentModal({
                     <input type="radio" name="method" value="ewallet" checked={paymentMethod === 'ewallet'} onChange={() => handlePaymentMethodChange('ewallet')} className="h-4 w-4 shrink-0 accent-blue-600" />
                     <div className="min-w-0 flex-1">
                       <div className="text-base font-semibold text-slate-900">E-Wallet</div>
-                      <div className="mt-0.5 text-sm text-slate-500">GoPay, OVO, Dana, ShopeePay</div>
+                      <div className="mt-0.5 text-sm text-slate-500">GoPay, ShopeePay</div>
                     </div>
                   </label>
 

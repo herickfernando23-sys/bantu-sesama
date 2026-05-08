@@ -9,6 +9,7 @@
     "seed:db": "node -e \"require('./models').sequelize.sync({ alter: true }).then(() => console.log('Database synced!')).catch(err => console.error('Sync error:', err));\""
   },
   "dependencies": {
+    "@google/generative-ai": "^0.21.0",
     "bcrypt": "^5.1.0",
     "body-parser": "^1.20.2",
     "cors": "^2.8.5",
