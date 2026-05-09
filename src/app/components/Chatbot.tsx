@@ -8,7 +8,7 @@ interface Message {
   timestamp: Date;
 }
 
-const apiBaseUrl = String(import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
+const apiBaseUrl = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:8080').replace(/\/$/, '');
 
 export function Chatbot() {
   const [isOpen, setIsOpen] = useState(false);

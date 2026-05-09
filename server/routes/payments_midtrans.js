@@ -138,8 +138,8 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
         paymentConfig = {};
         break;
       case 'ewallet':
-        // E-wallet options (OVO and Dana removed)
-        enabledPayments = ['gopay', 'shopeepay'];
+        // E-wallet options
+        enabledPayments = ['gopay', 'shopeepay', 'ovo', 'dana', 'linkaja'];
         paymentConfig = {};
         break;
       default:

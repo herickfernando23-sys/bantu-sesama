@@ -9,6 +9,7 @@ const authRoutes = require('./routes/auth');
 const campaignRoutes = require('./routes/campaigns');
 const paymentRoutes = require('./routes/payments');
 const chatbotRoutes = require('./routes/chatbot');
+const donationRoutes = require('./routes/donations');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -57,6 +58,55 @@ if (!isProduction) {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
+// Simple image proxy to avoid client-side CORS/CSP issues during development.
+app.get('/image-proxy', (req, res) => {
+  const url = String(req.query.url || '').trim();
+  if (!url) {
+    return res.status(400).json({ error: 'missing url query parameter' });
+  }
+
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch (err) {
+    return res.status(400).json({ error: 'invalid url' });
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    return res.status(400).json({ error: 'unsupported protocol' });
+  }
+
+  const lib = parsed.protocol === 'https:' ? require('https') : require('http');
+
+  const upstreamReq = lib.get(url, { headers: { 'User-Agent': 'BantuSesama-Image-Proxy/1.0' } }, (upstreamRes) => {
+    const statusCode = upstreamRes.statusCode || 500;
+    if (statusCode >= 400) {
+      res.status(statusCode).end();
+      upstreamRes.resume();
+      return;
+    }
+
+    const contentType = upstreamRes.headers['content-type'];
+    if (contentType) {
+      res.setHeader('Content-Type', contentType);
+    }
+    // Allow caching for development to reduce repeated fetches
+    res.setHeader('Cache-Control', 'public, max-age=86400');
+
+    upstreamRes.pipe(res);
+  });
+
+  upstreamReq.on('error', (err) => {
+    console.error('image-proxy upstream error', err && err.message);
+    if (!res.headersSent) res.status(502).json({ error: 'upstream fetch failed' });
+  });
+
+  upstreamReq.setTimeout(15000, () => {
+    upstreamReq.abort();
+    if (!res.headersSent) res.status(504).end();
+  });
+});
+
 app.get('/health', async (req, res) => {
   try {
     await sequelize.authenticate();
@@ -70,6 +120,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/campaigns', campaignRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/chatbot', chatbotRoutes);
+app.use('/api/donations', donationRoutes);
 
 const PORT = process.env.PORT || 4000;
 

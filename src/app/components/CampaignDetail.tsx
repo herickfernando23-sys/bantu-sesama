@@ -1,7 +1,7 @@
 import { ImageWithFallback } from './ImageWithFallback';
 import { MapPin, Users, Calendar, Share2, Heart, TrendingUp, Shield, FileText, Facebook, Twitter, Send, Mail, Link2, MessageCircle } from 'lucide-react';
 import { TransparencyChart } from './TransparencyChart';
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useMemo, useState, useRef } from 'react';
 import { PaymentModal } from './PaymentModal';
 
 interface Campaign {
@@ -165,6 +165,56 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   const [withdrawAmount, setWithdrawAmount] = useState(String(campaign.collected));
   const [withdrawNote, setWithdrawNote] = useState('');
   const [withdrawError, setWithdrawError] = useState('');
+  
+  // Generate mock data berbeda untuk setiap campaign berdasarkan campaign ID
+  const generateMockDonations = (campaignId: number) => {
+    // Only generate if campaign has donors
+    if (campaign.donors === 0) {
+      return [];
+    }
+    
+    const donors = [
+      'Siti Nurhaliza', 'Bambang Wijaya', 'Rina Sutrisno', 'Ahmad Suryanto', 'Dewi Lestari',
+      'Rudi Hartono', 'Sinta Paramita', 'Doni Pratama', 'Ratna Wijaya', 'Hendri Kusuma',
+      'Anita Soeharto', 'Budi Santoso', 'Citra Dewi', 'Eka Putra', 'Farah Nabila'
+    ];
+    const messages = [
+      'Semoga bisa membantu', 'Perjuangan membutuhkan dukungan', 'Semoga berkah dan lancar',
+      'Semangat terus!', 'Semoga lancar selalu', 'Bangkit dan berkembang', 'Untuk masa depan yang lebih baik',
+      'Doa dan dukungan bersama'
+    ];
+    
+    // Use campaign ID as seed untuk generate different data per campaign
+    let seed = campaignId;
+    const seededRandom = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    
+    const mockCount = Math.floor(seededRandom() * 5) + 5; // 5-9 mock donors
+    const mockData = [];
+    
+    for (let i = 0; i < mockCount; i++) {
+      const donorIdx = Math.floor(seededRandom() * donors.length);
+      const messageIdx = Math.floor(seededRandom() * (messages.length + 1));
+      const amount = (Math.floor(seededRandom() * 15) + 1) * 100000; // Rp 100k - 1.5jt
+      const hoursAgo = Math.floor(seededRandom() * 72) + 1; // 1-72 jam lalu
+      
+      mockData.push({
+        name: donors[donorIdx],
+        amount: amount,
+        message: messageIdx < messages.length ? messages[messageIdx] : '',
+        timestamp: Date.now() - hoursAgo * 60 * 60 * 1000
+      });
+    }
+    
+    return mockData;
+  };
+  
+  const mockDonations = useMemo(() => generateMockDonations(campaign.id), [campaign.id, campaign.donors]);
+  
+  const [fetchedDonations, setFetchedDonations] = useState<Array<{name: string; amount: number; message: string; timestamp: number}> | null>(null);
+  const [loadingDonations, setLoadingDonations] = useState(false);
 
   const percentage = Math.min((campaign.collected / campaign.target) * 100, 100);
   const canEdit = user?.email && campaign.creatorEmail && user.email.toLowerCase() === campaign.creatorEmail.toLowerCase();
@@ -194,14 +244,42 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
     return 'baru saja';
   };
   
-  const donorEntries = campaign.donations && campaign.donations.length > 0
-    ? campaign.donations.map(donation => ({
-        name: donation.name,
-        amount: donation.amount,
-        message: donation.message,
-        time: getTimeAgo(donation.timestamp)
-      })).reverse().slice(0, 5)
-    : [];
+  const donorEntries = (() => {
+    // Merge campaign.donations, fetchedDonations, and mockDonations so that
+    // real donations appended by user do not replace the mock donors.
+    const combined: Array<{name: string; amount: number; message: string; timestamp: number}> = [];
+
+    if (Array.isArray(campaign.donations) && campaign.donations.length > 0) {
+      combined.push(...campaign.donations);
+    }
+    if (Array.isArray(fetchedDonations) && fetchedDonations.length > 0) {
+      combined.push(...fetchedDonations);
+    }
+    if (Array.isArray(mockDonations) && mockDonations.length > 0) {
+      combined.push(...mockDonations);
+    }
+
+    if (combined.length === 0) return [];
+
+    // Deduplicate by donor content and time bucket to avoid repeated mock/fetch entries
+    const seen = new Set<string>();
+    const unique = combined.filter(d => {
+      const timeBucket = Math.floor(d.timestamp / (60 * 60 * 1000));
+      const key = `${d.name.trim().toLowerCase()}|${d.amount}|${(d.message || '').trim().toLowerCase()}|${timeBucket}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    unique.sort((a, b) => b.timestamp - a.timestamp);
+
+    return unique.slice(0, 5).map(donation => ({
+      name: donation.name,
+      amount: donation.amount,
+      message: donation.message,
+      time: getTimeAgo(donation.timestamp)
+    }));
+  })();
 
   const syncEditState = () => {
     setEditError('');
@@ -256,6 +334,51 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
       setIsRecurringActive(false);
     }
   }, [user?.email, campaign.id]);
+
+  // Fetch donations if not available but campaign has donors
+  useEffect(() => {
+    if (!campaign.donations || campaign.donations.length === 0) {
+      if (campaign.donors > 0) {
+        setLoadingDonations(true);
+        (async () => {
+            const apiBaseUrl = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:8080').replace(/\/$/, '');
+          try {
+            const res = await fetch(`${apiBaseUrl}/api/donations?campaignId=${campaign.id}`);
+            if (!res.ok) {
+              const text = await res.text().catch(() => '');
+              console.error('Failed to fetch donations: non-OK response', res.status, text);
+              setFetchedDonations([]);
+              return;
+            }
+
+            const contentType = res.headers.get('content-type') || '';
+            if (!contentType.includes('application/json')) {
+              const text = await res.text().catch(() => '');
+              console.error('Failed to fetch donations: expected JSON but got:', contentType, text.substring(0, 200));
+              setFetchedDonations([]);
+              return;
+            }
+
+            const data = await res.json().catch((err) => {
+              console.error('Failed to parse donations JSON:', err);
+              return null;
+            });
+
+            if (Array.isArray(data) && data.length > 0) {
+              setFetchedDonations(data);
+            } else {
+              setFetchedDonations([]);
+            }
+          } catch (err) {
+            console.error('Failed to fetch donations:', err);
+            setFetchedDonations([]);
+          } finally {
+            setLoadingDonations(false);
+          }
+        })();
+      }
+    }
+  }, [campaign.id, campaign.donors, campaign.donations]);
 
   const handleEditImageUpload = (file: File | null) => {
     if (!file) {
@@ -665,7 +788,10 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                   {activeTab === 'story' && (
                     <div className="prose prose-lg max-w-none">
                       <div className="space-y-4 text-gray-700 leading-relaxed break-words">
-                        {campaign.story.split('\n\n').map((paragraph, idx) => (
+                        {(campaign.story || campaign.fullDescription || campaign.description || '')
+                          .split('\n\n')
+                          .filter(Boolean)
+                          .map((paragraph, idx) => (
                           <p key={idx} className="text-base break-words">
                             {paragraph}
                           </p>
@@ -684,26 +810,45 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                   {activeTab === 'donors' && (
                     <div className="space-y-4">
                       {donorEntries.length === 0 ? (
-                        <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-600">
-                          Belum ada donasi untuk kampanye ini.
-                        </div>
-                      ) : (
-                        donorEntries.map((donor, idx) => (
-                          <div key={idx} className="p-4 bg-gray-50 rounded-lg">
-                            <div className="flex justify-between items-start mb-2">
-                              <div>
-                                <p className="font-medium text-gray-900">{donor.name}</p>
-                                <p className="text-sm text-gray-500">{donor.time}</p>
-                              </div>
-                              <p className="font-semibold text-blue-600">
-                                Rp {donor.amount.toLocaleString('id-ID')}
-                              </p>
-                            </div>
-                            {donor.message && (
-                              <p className="text-sm text-gray-600 italic">"{donor.message}"</p>
-                            )}
+                        campaign.donors === 0 ? (
+                          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-600">
+                            Belum ada donasi untuk kampanye ini.
                           </div>
-                        ))
+                        ) : loadingDonations ? (
+                          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-600">
+                            <p className="font-medium text-gray-900">Memuat data donatur...</p>
+                            <p className="text-sm text-gray-600 mt-2">Terdapat {campaign.donors} donatur</p>
+                          </div>
+                        ) : (
+                          <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-600 space-y-2">
+                            <p className="font-medium text-gray-900">Terdapat {campaign.donors} donatur</p>
+                            <p className="text-sm text-gray-600">Rincian donasi belum tersedia untuk ditampilkan.</p>
+                          </div>
+                        )
+                      ) : (
+                        <>
+                          {donorEntries.map((donor, idx) => (
+                            <div key={idx} className="p-4 bg-gray-50 rounded-lg">
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <p className="font-medium text-gray-900">{donor.name}</p>
+                                  <p className="text-sm text-gray-500">{donor.time}</p>
+                                </div>
+                                <p className="font-semibold text-blue-600">
+                                  Rp {donor.amount.toLocaleString('id-ID')}
+                                </p>
+                              </div>
+                              {donor.message && (
+                                <p className="text-sm text-gray-600 italic">"{donor.message}"</p>
+                              )}
+                            </div>
+                          ))}
+                          {campaign.donors > 5 && (
+                            <div className="p-4 text-center text-sm text-gray-600">
+                              Menampilkan 5 dari {campaign.donors} donatur terbaru
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   )}

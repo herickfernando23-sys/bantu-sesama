@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ExternalLink, Loader, RefreshCw, ShieldAlert, CheckCircle2, Clock3, XCircle, Copy } from 'lucide-react';
 
-const apiBaseUrl = String(import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
-const midtransClientKey = String(import.meta.env.VITE_MIDTRANS_CLIENT_KEY || '').trim();
-const viteMidtransIsProduction = String(import.meta.env.VITE_MIDTRANS_IS_PRODUCTION || '').toLowerCase() === 'true';
+const apiBaseUrl = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:8080').replace(/\/$/, '');
+const midtransClientKey = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_CLIENT_KEY) || '').trim();
+const viteMidtransIsProduction = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_IS_PRODUCTION) || '').toLowerCase() === 'true';
 const pendingPaymentsKey = 'bantusesama-pending-payments';
 
 type PaymentStatusResponse = {

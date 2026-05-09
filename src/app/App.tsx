@@ -1,3 +1,4 @@
+type InfoPageKey = Exclude<Page, 'kampanye' | 'donasi-saya' | 'cara-kerja' | 'login' | 'buat-kampanye' | 'panel' | 'admin' | 'admin-login' | 'lanjut-pembayaran' | 'home' | null>;
 import { useState, useEffect, useRef } from 'react';
 import { Navbar } from './components/Navbar';
 import { CampaignCard } from './components/CampaignCard';
@@ -117,6 +118,23 @@ const withdrawalRequestsKey = 'bantusesama-withdrawal-requests';
 const pendingPaymentsKey = 'bantusesama-pending-payments';
 const userSessionKey = 'bantusesama-user-session';
 const recurringDonationsKey = 'bantusesama-recurring-donors';
+const legacyCampaignIdMap: Record<number, number> = {
+  1001: 7,
+  1002: 8,
+  1003: 9,
+  1004: 10,
+  1005: 11,
+  1006: 12
+};
+
+const campaignImageOverrides: Record<number, string> = {
+  7: 'https://images.unsplash.com/photo-1545731782-7ce02675a3e1?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHxwYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+  8: 'https://images.unsplash.com/photo-1643886024293-b5d3d6bf92b2?q=80&w=1025&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+  9: 'https://images.unsplash.com/photo-1457972657980-4c9fddebec8d?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+  10: 'https://images.unsplash.com/photo-1664192356009-3e8ed68d3d08?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+  11: 'https://images.unsplash.com/photo-1533900298318-6b8da08a523e?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+  12: 'https://images.unsplash.com/photo-1597129778410-0e4932adbd77?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'
+};
 
 const loadRegisteredUsersFromStorage = () => {
   if (typeof window === 'undefined') {
@@ -230,6 +248,11 @@ const buildCampaignFingerprint = (campaign: CampaignRecord) => [
   campaign.category.trim().toLowerCase(),
 ].join('|');
 
+const migrateLegacyCampaignId = (campaign: CampaignRecord): CampaignRecord => {
+  const nextId = legacyCampaignIdMap[campaign.id];
+  return nextId ? { ...campaign, id: nextId } : campaign;
+};
+
 const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
   const seenIds = new Set<number>();
   const seenFingerprints = new Set<string>();
@@ -246,7 +269,16 @@ const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
   });
 };
 
-type InfoPageKey = Exclude<Page, 'kampanye' | 'donasi-saya' | 'cara-kerja' | 'login' | 'buat-kampanye' | 'panel' | 'admin' | 'admin-login' | 'home' | null>;
+const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => ({
+  ...migrateLegacyCampaignId(campaign),
+  createdAt: campaign.createdAt ?? Date.now(),
+  fullDescription: campaign.fullDescription || campaign.story || campaign.description || '',
+  story: campaign.story || campaign.fullDescription || campaign.description || '',
+  image: campaign.image || '',
+  fundAllocation: Array.isArray(campaign.fundAllocation) ? campaign.fundAllocation : [],
+  disbursementHistory: Array.isArray(campaign.disbursementHistory) ? campaign.disbursementHistory : [],
+  donations: Array.isArray(campaign.donations) ? campaign.donations : []
+});
 
 const infoPageContent: Record<InfoPageKey, { eyebrow: string; title: string; description: string; points: string[] }> = {
   'tentang-kami': {
@@ -363,8 +395,12 @@ export default function App() {
     ? (persistedAdminUser ? 'admin' : 'admin-login')
     : null;
   const [selectedCampaign, setSelectedCampaign] = useState<number | null>(null);
+  const selectedCampaignSnapshotRef = useRef<CampaignRecord | null>(null);
   const [selectedCategory, setSelectedCategory] = useState('Semua Kategori');
   const [sortBy, setSortBy] = useState('Terbaru');
+  const [currentPage, setCurrentPage] = useState(1);
+  const [campaignListFadeOut, setCampaignListFadeOut] = useState(false);
+  const PAGE_SIZE = 6;
   const [page, setPage] = useState<Page>(initialPage);
   const [user, setUser] = useState<AppUser | null>(persistedUser);
   const [adminUser, setAdminUser] = useState<AppUser | null>(persistedAdminUser);
@@ -381,6 +417,8 @@ export default function App() {
   const [profileEditMessage, setProfileEditMessage] = useState('');
   const rejectUndoTimeoutRef = useRef<number | null>(null);
   const deletedUserUndoTimeoutRef = useRef<number | null>(null);
+  const campaignPageTransitionTimerRef = useRef<number | null>(null);
+  const campaignListTopRef = useRef<HTMLDivElement | null>(null);
 
   const campaignStorageKey = 'bantusesama-campaigns';
 
@@ -396,7 +434,7 @@ export default function App() {
       }
 
       const parsed = JSON.parse(raw) as CampaignRecord[];
-      return Array.isArray(parsed) ? parsed : null;
+      return Array.isArray(parsed) ? parsed.map(normalizeCampaignRecord) : null;
     } catch {
       return null;
     }
@@ -435,7 +473,7 @@ export default function App() {
     return true;
   };
 
-  const openPendingPayment = (payment: PendingPaymentRecord) => {
+  const openPendingPayment = (payment: Partial<PendingPaymentRecord> & { donationId: number; orderId: string; campaignTitle: string; amount: number; method: 'virtual_account' | 'ewallet'; createdAt?: number; redirectUrl?: string }) => {
     const params = new URLSearchParams({
       payment: 'continue',
       donationId: String(payment.donationId || ''),
@@ -810,15 +848,204 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
   ]);
 
+  // Append additional mock campaigns for testing pagination (only if not already present)
+  useEffect(() => {
+    if (!campaignsHydrated) return; // wait until stored campaigns are loaded
+    const apiBase = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
+    const extraMockCampaigns: CampaignRecord[] = [
+      {
+        id: 7,
+        // make these mock campaigns older so they do not appear on page 1 (keep real campaigns first)
+        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 3,
+        title: 'Baksop Ibu Lina Butuh Modal Baru',
+        description: 'Baksop kecil membutuhkan modal untuk membeli peralatan baru setelah kebakaran.',
+        fullDescription: 'Baksop Ibu Lina adalah usaha rumahan membutuhkan modal untuk pengganti peralatan.',
+        story: 'Baksop Ibu Lina adalah usaha rumahan. Bantuan digunakan untuk mengganti peralatan yang hilang.',
+        status: 'verified',
+        image: 'https://images.unsplash.com/photo-1545731782-7ce02675a3e1?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHxwYWdlfHx8fGVufDB8fHx8fA%3D%3D',
+        location: 'Bandung',
+        target: 8000000,
+        collected: 1200000,
+        donors: 12,
+        daysLeft: 20,
+        category: 'UMKM Terdampak Bencana',
+        organizer: 'Komunitas Lokal',
+        donations: [],
+        fundAllocation: [],
+        disbursementHistory: []
+      },
+      {
+        id: 8,
+        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 2,
+        title: 'Warung Nasi Pak Eko Perlu Perbaikan',
+        description: 'Atap warung rusak, butuh perbaikan untuk kembali berjualan.',
+        fullDescription: 'Warung Nasi Pak Eko membutuhkan perbaikan atap dan peralatan.',
+        story: 'Warung Nasi Pak Eko membutuhkan perbaikan atap dan peralatan agar dapat kembali berjualan.',
+        status: 'verified',
+        image: campaignImageOverrides[8],
+        location: 'Yogyakarta',
+        target: 6000000,
+        collected: 2500000,
+        donors: 34,
+        daysLeft: 12,
+        category: 'UMKM Terdampak Bencana',
+        organizer: 'Relawan Lokal',
+        donations: [],
+        fundAllocation: [],
+        disbursementHistory: []
+      },
+      {
+        id: 9,
+        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 2,
+        title: 'Tukang Jahit Bu Titin Kembali Beroperasi',
+        description: 'Mesin jahit lama butuh penggantian agar pesanan dapat kembali berjalan.',
+        fullDescription: 'Mesin jahit Bu Titin mengalami kerusakan serius, perlu diganti.',
+        story: 'Mesin jahit Bu Titin rusak dan butuh penggantian agar usaha bisa berjalan lagi.',
+        status: 'verified',
+        image: campaignImageOverrides[9],
+        location: 'Surabaya',
+        target: 4000000,
+        collected: 1800000,
+        donors: 8,
+        daysLeft: 30,
+        category: 'UMKM Terdampak Bencana',
+        organizer: 'Komunitas Penjahit',
+        donations: [],
+        fundAllocation: [],
+        disbursementHistory: []
+      },
+      {
+        id: 10,
+        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 1,
+        title: 'Pedagang Kaki Lima Butuh Gerobak Baru',
+        description: 'Komunitas PKL ingin membeli gerobak bersama agar bisa berdagang lagi.',
+        fullDescription: 'Dukungan untuk membeli gerobak dan peralatan agar usaha kembali berjalan.',
+        story: 'Komunitas PKL membutuhkan gerobak baru agar bisa berjualan kembali.',
+        status: 'verified',
+        image: campaignImageOverrides[10],
+        location: 'Medan',
+        target: 7000000,
+        collected: 3500000,
+        donors: 27,
+        daysLeft: 18,
+        category: 'UMKM Terdampak Bencana',
+        organizer: 'Paguyuban PKL',
+        donations: [],
+        fundAllocation: [],
+        disbursementHistory: []
+      },
+      {
+        id: 11,
+        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 1,
+        title: 'Ibu Rani Butuh Modal untuk Toko Kelontong',
+        description: 'Toko kelontong perlu tambahan modal untuk restock barang.',
+        fullDescription: 'Modal tambahan untuk membeli stok barang dan pembayaran sewa.',
+        story: 'Toko kelontong memerlukan modal untuk restock dan menutup biaya sewa.',
+        status: 'verified',
+        image: campaignImageOverrides[11],
+        location: 'Semarang',
+        target: 5000000,
+        collected: 900000,
+        donors: 5,
+        daysLeft: 40,
+        category: 'UMKM Terdampak Bencana',
+        organizer: 'RT setempat',
+        donations: [],
+        fundAllocation: [],
+        disbursementHistory: []
+      },
+      {
+        id: 12,
+        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 4,
+        title: 'Koperasi UKM Butuh Dana Operasional',
+        description: 'Koperasi butuh tambahan dana untuk program pelatihan dan modal kerja.',
+        fullDescription: 'Dukungan untuk program pelatihan dan modal usaha kecil.',
+        story: 'Koperasi lokal butuh dana operasional untuk program pelatihan dan pendanaan.',
+        status: 'verified',
+        image: campaignImageOverrides[12],
+        location: 'Bali',
+        target: 20000000,
+        collected: 4000000,
+        donors: 18,
+        daysLeft: 50,
+        category: 'UMKM Terdampak Bencana',
+        organizer: 'Koperasi Lokal',
+        donations: [],
+        fundAllocation: [],
+        disbursementHistory: []
+      }
+    ];
+
+    setCampaigns(prev => {
+      // Avoid duplicate insertion on HMR or re-mount
+      if (prev.some(c => c.id === 7)) return prev;
+      return [...prev, ...extraMockCampaigns];
+    });
+  }, [campaignsHydrated]);
+
   useEffect(() => {
     const storedCampaigns = loadCampaignsFromStorage();
     if (storedCampaigns && storedCampaigns.length > 0) {
-      const cleanedCampaigns = dedupeCampaigns(storedCampaigns);
+      const apiBase = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
+      const originalImagesFor1to6: Record<number, string> = {
+        1: 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+        2: 'https://images.unsplash.com/photo-1774370793502-85098cd3fd00?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwyfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+        3: 'https://images.unsplash.com/photo-1762592957827-99db60cfd0c7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cmFkaXRpb25hbCUyMG1hcmtldCUyMGZvb2QlMjB2ZW5kb3J8ZW58MXx8fHwxNzc3NTMyOTM3fDA&ixlib=rb-4.1.0&q=80&w=1080',
+        4: 'https://images.unsplash.com/photo-1768637758036-9a690925ae72?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw0fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+        5: 'https://images.unsplash.com/photo-1757763006278-d0fa5d582d0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+        6: 'https://images.unsplash.com/photo-1767678233351-9308d8220fa5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw1fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080'
+      };
+
+      const cleanedCampaigns = dedupeCampaigns(storedCampaigns).map((c) => {
+        // restore original images for campaigns 1-6 to avoid accidental proxying or broken URLs
+        if (c && typeof c.id === 'number' && originalImagesFor1to6[c.id]) {
+          return { ...c, image: originalImagesFor1to6[c.id] };
+        }
+
+        if (c && typeof c.id === 'number' && campaignImageOverrides[c.id]) {
+          return { ...c, image: campaignImageOverrides[c.id] };
+        }
+
+        try {
+          if (typeof c.image === 'string' && c.image.startsWith('http')) {
+            const parsed = new URL(c.image);
+            // If image is already served via our proxy, keep it
+            if (!c.image.startsWith(`${apiBase}/image-proxy`)) {
+              // Proxy external images (avoid proxying same-origin or data/blob)
+              if (parsed.hostname !== window.location.hostname) {
+                return { ...c, image: `${apiBase}/image-proxy?url=${encodeURIComponent(c.image)}` };
+              }
+            }
+          }
+        } catch (err) {
+          // ignore malformed urls
+        }
+
+        return c;
+      });
+
       setCampaigns(cleanedCampaigns);
       window.localStorage.setItem(campaignStorageKey, JSON.stringify(cleanedCampaigns));
     }
 
     setCampaignsHydrated(true);
+  }, []);
+
+  useEffect(() => {
+    setCampaigns((prev) => {
+      const needsNormalization = prev.some((campaign) => (
+        !campaign.story
+        || !campaign.fullDescription
+        || !Array.isArray(campaign.fundAllocation)
+        || !Array.isArray(campaign.disbursementHistory)
+      ));
+
+      if (!needsNormalization) {
+        return prev;
+      }
+
+      return prev.map(normalizeCampaignRecord);
+    });
   }, []);
 
   useEffect(() => {
@@ -910,13 +1137,17 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     saveUserSessionToStorage(user);
   }, [user]);
 
-  const visiblePendingPayments = user?.email
-    ? pendingPayments.filter((payment) => !payment.ownerEmail || payment.ownerEmail === user.email)
+  const _userEmail = user?.email ?? null;
+  const visiblePendingPayments = _userEmail
+    ? pendingPayments.filter((payment) => !payment.ownerEmail || payment.ownerEmail === _userEmail)
     : [];
 
   const recurringDonationStatus = getRecurringDonationForEmail(user?.email);
 
-  const campaignsForDisplay = [...campaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
+  const campaignsSortedByTime = [...campaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
+  const mockCampaigns = campaignsSortedByTime.filter((campaign) => campaign.id >= 1000);
+  const realCampaigns = campaignsSortedByTime.filter((campaign) => campaign.id < 1000);
+  const campaignsForDisplay = [...mockCampaigns, ...realCampaigns];
 
   const donationHistoryForDisplay = campaignsForDisplay.flatMap((campaign) => {
     if (campaign.donations && campaign.donations.length > 0) {
@@ -1132,6 +1363,51 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     filteredCampaigns = [...filteredCampaigns].sort((a, b) => (b.collected / b.target) - (a.collected / a.target));
   }
 
+  const prioritizedCampaignIds = new Set([1, 2, 3, 4, 5, 6]);
+  const prioritizedCampaigns = filteredCampaigns.filter((campaign) => prioritizedCampaignIds.has(campaign.id));
+  const otherCampaigns = filteredCampaigns.filter((campaign) => !prioritizedCampaignIds.has(campaign.id));
+  filteredCampaigns = [...prioritizedCampaigns, ...otherCampaigns];
+
+  // Pagination logic
+  const totalPages = Math.max(1, Math.ceil(filteredCampaigns.length / PAGE_SIZE));
+  const paginatedCampaigns = filteredCampaigns.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+
+  const goToPublicCampaignPage = (nextPage: number) => {
+    if (nextPage === currentPage) {
+      return;
+    }
+
+    if (campaignPageTransitionTimerRef.current) {
+      window.clearTimeout(campaignPageTransitionTimerRef.current);
+    }
+
+    setCampaignListFadeOut(true);
+    campaignPageTransitionTimerRef.current = window.setTimeout(() => {
+      setCurrentPage(nextPage);
+      window.requestAnimationFrame(() => {
+        setCampaignListFadeOut(false);
+        if (campaignListTopRef.current) {
+          const scrollTarget = campaignListTopRef.current.getBoundingClientRect().top + window.scrollY - 170;
+          window.scrollTo({ top: Math.max(0, scrollTarget), behavior: 'smooth' });
+        }
+      });
+      campaignPageTransitionTimerRef.current = null;
+    }, 220);
+  };
+
+  // Reset page when filters or campaigns change
+  useEffect(() => {
+    setCurrentPage(1);
+    setCampaignListFadeOut(false);
+  }, [selectedCategory, sortBy, campaigns]);
+
+  useEffect(() => () => {
+    if (campaignPageTransitionTimerRef.current) {
+      window.clearTimeout(campaignPageTransitionTimerRef.current);
+      campaignPageTransitionTimerRef.current = null;
+    }
+  }, []);
+
   // handle special scroll/navigation pages
   useEffect(() => {
     if (page === 'cara-kerja') {
@@ -1151,7 +1427,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
   }, [page]);
 
-  const selectedCampaignData = campaigns.find(c => c.id === selectedCampaign);
+  const selectedCampaignData = campaigns.find(c => c.id === selectedCampaign) ?? (selectedCampaignSnapshotRef.current?.id === selectedCampaign ? selectedCampaignSnapshotRef.current : null);
 
   useEffect(() => {
     if (selectedCampaignData) {
@@ -1285,7 +1561,31 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
         />
         <div className="max-w-md mx-auto py-12 px-4">
           <h2 className="text-2xl font-bold mb-4">Buat Kampanye</h2>
-          <CreateCampaign user={user} onCreate={(c) => { setCampaigns(prev => [c, ...prev]); openCampaign(c.id); }} />
+          <CreateCampaign
+            user={user}
+            onCreate={(c) => {
+              const normalizedCampaign: CampaignRecord = {
+                ...c,
+                createdAt: c.createdAt ?? Date.now(),
+                fullDescription: c.fullDescription || c.story || c.description,
+                story: c.story || c.fullDescription || c.description,
+                image: c.image || '',
+                fundAllocation: Array.isArray(c.fundAllocation) ? c.fundAllocation : [],
+                disbursementHistory: Array.isArray(c.disbursementHistory) ? c.disbursementHistory : [],
+                donations: Array.isArray(c.donations) ? c.donations : []
+              };
+
+              selectedCampaignSnapshotRef.current = normalizedCampaign;
+              setCampaigns((prev) => [...prev, normalizedCampaign]);
+              setSelectedCampaign(normalizedCampaign.id);
+              setPage(null);
+              window.history.pushState(
+                { view: 'campaign', campaignId: normalizedCampaign.id },
+                '',
+                `/?campaign=${normalizedCampaign.id}`
+              );
+            }}
+          />
         </div>
       </>
     );
@@ -1600,17 +1900,46 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                 <option>Paling Mendesak</option>
                 <option>Hampir Tercapai</option>
               </select>
+              
             </div>
           </div>
 
-          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {filteredCampaigns.map((campaign) => (
+          <div ref={campaignListTopRef} className={`grid md:grid-cols-2 lg:grid-cols-3 gap-6 transition-opacity duration-300 ${campaignListFadeOut ? 'opacity-0' : 'opacity-100'}`}>
+            {paginatedCampaigns.map((campaign) => (
               <CampaignCard
                 key={campaign.id}
                 {...campaign}
                 onClick={() => openCampaign(campaign.id)}
               />
             ))}
+          </div>
+
+          <div className="mt-8 flex items-center justify-center space-x-3">
+            <button
+              onClick={() => goToPublicCampaignPage(Math.max(1, currentPage - 1))}
+              disabled={currentPage === 1}
+              className={`px-3 py-2 rounded-md border ${currentPage === 1 ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'}`}>
+              Prev
+            </button>
+
+            <nav className="flex items-center space-x-2" aria-label="Pagination">
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
+                <button
+                  key={n}
+                  onClick={() => goToPublicCampaignPage(n)}
+                  aria-current={currentPage === n ? 'page' : undefined}
+                  className={`px-3 py-2 rounded-md border ${currentPage === n ? 'bg-blue-600 text-white' : 'bg-white hover:bg-gray-50 text-gray-700'}`}>
+                  {n}
+                </button>
+              ))}
+            </nav>
+
+            <button
+              onClick={() => goToPublicCampaignPage(Math.min(totalPages, currentPage + 1))}
+              disabled={currentPage === totalPages}
+              className={`px-3 py-2 rounded-md border ${currentPage === totalPages ? 'bg-gray-100 text-gray-400 cursor-not-allowed' : 'bg-white hover:bg-gray-50'}`}>
+              Next
+            </button>
           </div>
         </div>
       </section>

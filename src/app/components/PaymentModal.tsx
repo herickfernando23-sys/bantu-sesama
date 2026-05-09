@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, CreditCard, Check, Calendar, Loader, Clock3, RefreshCw, ExternalLink } from 'lucide-react';
 
-const apiBaseUrl = String(import.meta.env.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
-const midtransClientKey = String(import.meta.env.VITE_MIDTRANS_CLIENT_KEY || '').trim();
-const viteMidtransIsProduction = String(import.meta.env.VITE_MIDTRANS_IS_PRODUCTION || '').toLowerCase() === 'true';
+const apiBaseUrl = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
+const midtransClientKey = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_CLIENT_KEY) || '').trim();
+const viteMidtransIsProduction = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_IS_PRODUCTION) || '').toLowerCase() === 'true';
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 // Log env vars for debugging
@@ -232,8 +232,44 @@ export function PaymentModal({
   const [paymentMethod, setPaymentMethod] = useState<'virtual_account' | 'ewallet'>('ewallet');
   const [isSnapReady, setIsSnapReady] = useState(!!window.snap);
   const [isDemoPaymentMode, setIsDemoPaymentMode] = useState(false);
+  const paymentCompletionRef = useRef(false);
+  const closeFailureTimeoutRef = useRef<number | null>(null);
+  const pendingErrorTimeoutRef = useRef<number | null>(null);
+  const suppressErrorsRef = useRef(false);
+
+  const safeSetError = (msg: string, moveToError = true, delay = 800) => {
+    if (paymentCompletionRef.current || suppressErrorsRef.current) {
+      console.info('[PaymentModal] Ignored error after completion:', msg);
+      return;
+    }
+
+    if (pendingErrorTimeoutRef.current) {
+      window.clearTimeout(pendingErrorTimeoutRef.current);
+      pendingErrorTimeoutRef.current = null;
+    }
+
+    pendingErrorTimeoutRef.current = window.setTimeout(() => {
+      pendingErrorTimeoutRef.current = null;
+      if (paymentCompletionRef.current) {
+        console.info('[PaymentModal] Suppressed error because payment completed:', msg);
+        return;
+      }
+      setError(msg);
+      if (moveToError) setStep('error');
+    }, delay);
+  };
 
   const resetForm = () => {
+    paymentCompletionRef.current = false;
+    if (closeFailureTimeoutRef.current) {
+      window.clearTimeout(closeFailureTimeoutRef.current);
+      closeFailureTimeoutRef.current = null;
+    }
+    if (pendingErrorTimeoutRef.current) {
+      window.clearTimeout(pendingErrorTimeoutRef.current);
+      pendingErrorTimeoutRef.current = null;
+    }
+    suppressErrorsRef.current = false;
     setStep('identity');
     setAmount('');
     setIsRecurring(false);
@@ -355,6 +391,15 @@ export function PaymentModal({
   };
 
   const completeSuccessfulPayment = (paymentAmount: number, message: string) => {
+    paymentCompletionRef.current = true;
+    if (closeFailureTimeoutRef.current) {
+      window.clearTimeout(closeFailureTimeoutRef.current);
+      closeFailureTimeoutRef.current = null;
+    }
+    if (pendingErrorTimeoutRef.current) {
+      window.clearTimeout(pendingErrorTimeoutRef.current);
+      pendingErrorTimeoutRef.current = null;
+    }
     if (donationId) {
       removePendingPayment(donationId, orderId);
     }
@@ -377,17 +422,19 @@ export function PaymentModal({
       message: donorMessage
     });
     setStep('success');
-
-    setTimeout(() => {
-      onClose();
-      resetForm();
-    }, 3000);
   };
 
   const checkPendingStatus = async () => {
     if (!donationId) {
-      setError('Data pembayaran belum lengkap.');
+      safeSetError('Data pembayaran belum lengkap.');
       return;
+    }
+
+    // suppress transient errors while actively checking status
+    suppressErrorsRef.current = true;
+    if (pendingErrorTimeoutRef.current) {
+      window.clearTimeout(pendingErrorTimeoutRef.current);
+      pendingErrorTimeoutRef.current = null;
     }
 
     setCheckingStatus(true);
@@ -422,15 +469,19 @@ export function PaymentModal({
 
       setPendingMessage('Pembayaran masih pending. Silakan selesaikan pembayaran di channel yang dipilih lalu cek lagi beberapa saat lagi.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal mengecek status pembayaran');
+      safeSetError(err instanceof Error ? err.message : 'Gagal mengecek status pembayaran');
     } finally {
       setCheckingStatus(false);
+      // stop suppressing errors shortly after check completes
+      setTimeout(() => {
+        suppressErrorsRef.current = false;
+      }, 200);
     }
   };
 
   const cancelPendingPayment = async () => {
     if (!donationId) {
-      setError('Data pembayaran belum lengkap.');
+      safeSetError('Data pembayaran belum lengkap.');
       return;
     }
 
@@ -460,9 +511,9 @@ export function PaymentModal({
       removePendingPayment(donationId, orderId);
       setPendingMessage('Pembayaran berhasil dibatalkan.');
       setStep('error');
-      setError('Pembayaran telah dibatalkan.');
+      safeSetError('Pembayaran telah dibatalkan.');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal membatalkan pembayaran');
+      safeSetError(err instanceof Error ? err.message : 'Gagal membatalkan pembayaran');
     } finally {
       setCheckingStatus(false);
     }
@@ -539,8 +590,7 @@ export function PaymentModal({
         const snapTimeoutHandle = setTimeout(() => {
             if (!snapCallbackFired) {
             console.error('[Payment] TIMEOUT: Snap popup did not show or callback not fired after 10 seconds');
-            setError('Pembayaran tidak bisa dilanjutkan saat ini. Silakan coba lagi beberapa saat.');
-            setStep('error');
+            safeSetError('Pembayaran tidak bisa dilanjutkan saat ini. Silakan coba lagi beberapa saat.');
           }
         }, 10000);
 
@@ -551,6 +601,11 @@ export function PaymentModal({
           window.snap.pay(tokenToUse, {
             onSuccess: async (result: Record<string, unknown>) => {
               snapCallbackFired = true;
+              paymentCompletionRef.current = true;
+              if (closeFailureTimeoutRef.current) {
+                window.clearTimeout(closeFailureTimeoutRef.current);
+                closeFailureTimeoutRef.current = null;
+              }
               clearTimeout(snapTimeoutHandle);
               console.info('Midtrans onSuccess', { result, donationId: donationIdForCallback, orderId: orderIdForCallback });
               try {
@@ -577,12 +632,16 @@ export function PaymentModal({
                 completeSuccessfulPayment(donationAmount, `Donasi Rp ${donationAmount.toLocaleString('id-ID')} berhasil diproses`);
               } catch (err) {
                 console.error('Confirm failed after onSuccess', err);
-                setError(err instanceof Error ? err.message : 'Konfirmasi pembayaran gagal');
-                setStep('error');
+                safeSetError(err instanceof Error ? err.message : 'Konfirmasi pembayaran gagal');
               }
             },
             onPending: (result: Record<string, unknown>) => {
               snapCallbackFired = true;
+              paymentCompletionRef.current = true;
+              if (closeFailureTimeoutRef.current) {
+                window.clearTimeout(closeFailureTimeoutRef.current);
+                closeFailureTimeoutRef.current = null;
+              }
               clearTimeout(snapTimeoutHandle);
               console.info('Midtrans onPending', { result, donationId: donationIdForCallback, orderId: orderIdForCallback });
               
@@ -598,8 +657,7 @@ export function PaymentModal({
                   body: JSON.stringify({ donationId: donationIdForCallback })
                 }).catch(err => console.error('Auto-cancel failed:', err));
                 
-                setError('Pembayaran tanpa akun tidak dapat disimpan sebagai pending. Silakan donasi dengan akun untuk dapat track pembayaran.');
-                setStep('error');
+                safeSetError('Pembayaran tanpa akun tidak dapat disimpan sebagai pending. Silakan donasi dengan akun untuk dapat track pembayaran.');
                 return;
               }
               
@@ -628,18 +686,29 @@ export function PaymentModal({
             },
             onError: (result?: Record<string, unknown>) => {
               snapCallbackFired = true;
+              if (closeFailureTimeoutRef.current) {
+                window.clearTimeout(closeFailureTimeoutRef.current);
+                closeFailureTimeoutRef.current = null;
+              }
               clearTimeout(snapTimeoutHandle);
               console.error('Midtrans onError', { result, donationId: donationIdForCallback, orderId: orderIdForCallback });
-              setError('Pembayaran Midtrans gagal. Silakan coba lagi.');
-              setStep('error');
+              safeSetError('Pembayaran Midtrans gagal. Silakan coba lagi.');
             },
             onClose: () => {
               snapCallbackFired = true;
               clearTimeout(snapTimeoutHandle);
               console.info('Midtrans onClose', { donationId: donationIdForCallback, orderId: orderIdForCallback, transactionId: transactionIdForCallback, step: stepRef.current });
-              if (stepRef.current === 'payment') {
-                setError('Pembayaran dibatalkan. Silakan coba lagi jika ingin melanjutkan donasi.');
-                setStep('error');
+              if (stepRef.current === 'payment' && !paymentCompletionRef.current) {
+                if (closeFailureTimeoutRef.current) {
+                  window.clearTimeout(closeFailureTimeoutRef.current);
+                }
+
+                closeFailureTimeoutRef.current = window.setTimeout(() => {
+                  closeFailureTimeoutRef.current = null;
+                  if (stepRef.current === 'payment' && !paymentCompletionRef.current) {
+                    safeSetError('Pembayaran dibatalkan. Silakan coba lagi jika ingin melanjutkan donasi.');
+                  }
+                }, 5000);
               } else {
                 console.info('Midtrans closed after success/pending — ignoring');
               }
@@ -648,9 +717,13 @@ export function PaymentModal({
           return;
         } catch (err) {
           console.error('[Payment] Error calling snap.pay:', err);
-          clearTimeout(snapTimeoutHandle);
-          setError(`Gagal membuka Snap: ${err instanceof Error ? err.message : 'Unknown error'}`);
-          setStep('error');
+          const errorMessage = err instanceof Error ? err.message : String(err || 'Unknown error');
+          const looksLikeSnapPostMessageIssue = /postMessage|origin|recipient window/i.test(errorMessage);
+
+          if (!looksLikeSnapPostMessageIssue) {
+            clearTimeout(snapTimeoutHandle);
+            safeSetError(`Gagal membuka Snap: ${errorMessage}`);
+          }
           return;
         }
       }
@@ -680,8 +753,7 @@ export function PaymentModal({
       const donationAmount = Number(amount);
       completeSuccessfulPayment(donationAmount, `Donasi Rp ${donationAmount.toLocaleString('id-ID')} berhasil diproses (metode: ${paymentMethod})`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Pembayaran gagal');
-      setStep('error');
+      safeSetError(err instanceof Error ? err.message : 'Pembayaran gagal');
     } finally {
       setLoading(false);
     }
@@ -1084,6 +1156,15 @@ export function PaymentModal({
                   ✓ Donasi rutin bulanan telah diaktifkan
                 </p>
               )}
+              <button
+                onClick={() => {
+                  onClose();
+                  resetForm();
+                }}
+                className="mt-6 w-full py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+              >
+                Tutup
+              </button>
             </div>
           )}
 

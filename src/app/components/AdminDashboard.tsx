@@ -1,5 +1,6 @@
 import { Badge } from './ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
+import { useEffect, useRef, useState } from 'react';
 import {
   BarChart3,
   CheckCircle2,
@@ -17,6 +18,7 @@ type WithdrawalStatus = 'Pending' | 'Success' | 'Rejected';
 
 type Campaign = {
   id: number;
+  createdAt?: number;
   title: string;
   description: string;
   location: string;
@@ -65,6 +67,44 @@ interface AdminDashboardProps {
 }
 
 export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onVerifyCampaign, onRejectCampaign, onDeleteUser, onUpdateWithdrawalStatus, onClearWithdrawals, onLogout }: AdminDashboardProps) {
+  const PAGE_SIZE = 6;
+  const [campaignPage, setCampaignPage] = useState(1);
+  const [campaignFadeOut, setCampaignFadeOut] = useState(false);
+  const pageTransitionTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    const totalPages = Math.max(1, Math.ceil(campaigns.length / PAGE_SIZE));
+    setCampaignPage((currentPage) => Math.min(currentPage, totalPages));
+  }, [campaigns]);
+
+  useEffect(() => () => {
+    if (pageTransitionTimerRef.current) {
+      window.clearTimeout(pageTransitionTimerRef.current);
+      pageTransitionTimerRef.current = null;
+    }
+  }, []);
+
+  const sortedCampaigns = [...campaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
+  const totalCampaignPages = Math.max(1, Math.ceil(sortedCampaigns.length / PAGE_SIZE));
+  const paginatedCampaigns = sortedCampaigns.slice((campaignPage - 1) * PAGE_SIZE, campaignPage * PAGE_SIZE);
+
+  const goToCampaignPage = (nextPage: number) => {
+    if (nextPage === campaignPage) {
+      return;
+    }
+
+    if (pageTransitionTimerRef.current) {
+      window.clearTimeout(pageTransitionTimerRef.current);
+    }
+
+    setCampaignFadeOut(true);
+    pageTransitionTimerRef.current = window.setTimeout(() => {
+      setCampaignPage(nextPage);
+      window.requestAnimationFrame(() => setCampaignFadeOut(false));
+      pageTransitionTimerRef.current = null;
+    }, 220);
+  };
+
   const totalRaised = campaigns.reduce((sum, campaign) => sum + campaign.collected, 0);
   const totalTarget = campaigns.reduce((sum, campaign) => sum + campaign.target, 0);
   const totalDonors = campaigns.reduce((sum, campaign) => sum + campaign.donors, 0);
@@ -341,32 +381,32 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
               </CardDescription>
             </CardHeader>
             <CardContent className="px-6 pb-6">
-              <div className="w-full">
-                <table className="w-full text-left text-sm">
-                  <thead className="text-slate-400 border-b border-slate-700">
+              <div className={`w-full max-h-[420px] overflow-y-auto overflow-x-hidden rounded-2xl border border-slate-700 transition-opacity duration-300 ${campaignFadeOut ? 'opacity-0' : 'opacity-100'}`}>
+                <table className="w-full table-fixed text-left text-sm">
+                  <thead className="sticky top-0 z-10 bg-slate-800 text-slate-400 border-b border-slate-700">
                     <tr>
-                      <th className="pb-3 font-medium">Kampanye</th>
-                      <th className="pb-3 font-medium">Lokasi</th>
-                      <th className="pb-3 font-medium">Status</th>
-                      <th className="pb-3 font-medium">Progress</th>
-                      <th className="pb-3 font-medium">Aksi</th>
+                      <th className="py-4 pr-3 font-medium w-[34%]">Kampanye</th>
+                      <th className="py-4 pr-3 font-medium w-[18%]">Lokasi</th>
+                      <th className="py-4 pr-3 font-medium w-[16%]">Status</th>
+                      <th className="py-4 pr-3 font-medium w-[16%]">Progress</th>
+                      <th className="py-4 font-medium w-[16%]">Aksi</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {campaigns.map((campaign) => {
+                    {paginatedCampaigns.map((campaign) => {
                       const progress = Math.min((campaign.collected / campaign.target) * 100, 100);
                       const isPending = campaign.status === 'pending';
                       const isRejected = campaign.status === 'rejected';
 
                       return (
-                        <tr key={campaign.id} className="border-b border-slate-700 last:border-b-0">
-                          <td className="py-4 pr-4">
-                            <div className="font-medium text-slate-100">{campaign.title}</div>
-                            <div className="text-xs text-slate-400">{campaign.organizer}</div>
+                        <tr key={campaign.id} className="border-b border-slate-700/80 last:border-b-0 align-top">
+                          <td className="py-5 pr-3 break-words whitespace-normal">
+                            <div className="font-medium text-slate-100 leading-6">{campaign.title}</div>
+                            <div className="text-xs text-slate-400 mt-2 leading-5">{campaign.organizer}</div>
                           </td>
-                          <td className="py-4 pr-4 text-slate-300">{campaign.location}</td>
-                          <td className="py-4 pr-4">{statusBadge(campaign.status ?? 'verified')}</td>
-                          <td className="py-4 pr-4">
+                          <td className="py-5 pr-3 text-slate-300 break-words whitespace-normal leading-6">{campaign.location}</td>
+                          <td className="py-5 pr-3">{statusBadge(campaign.status ?? 'verified')}</td>
+                          <td className="py-5 pr-3">
                             <div className="flex items-center gap-2">
                               <div className="h-2 w-16 rounded-full bg-slate-700 overflow-hidden">
                                 <div className="h-full rounded-full bg-blue-500" style={{ width: `${progress}%` }} />
@@ -374,7 +414,7 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
                               <span className="text-xs text-slate-400 whitespace-nowrap">{progress.toFixed(0)}%</span>
                             </div>
                           </td>
-                          <td className="py-4 pr-4">
+                          <td className="py-5">
                             <div className="flex flex-wrap gap-2">
                               <button
                                 onClick={() => onVerifyCampaign(campaign.id)}
@@ -396,6 +436,37 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
                   </tbody>
                 </table>
               </div>
+
+              {totalCampaignPages > 1 && (
+                <div className="mt-4 flex items-center justify-center gap-2 flex-wrap">
+                  <button
+                    onClick={() => goToCampaignPage(Math.max(1, campaignPage - 1))}
+                    disabled={campaignPage === 1}
+                    className={`rounded-lg border px-3 py-2 text-sm transition-colors ${campaignPage === 1 ? 'cursor-not-allowed border-slate-700 text-slate-500' : 'border-slate-600 bg-slate-700 text-slate-100 hover:bg-slate-600'}`}
+                  >
+                    Prev
+                  </button>
+
+                  {Array.from({ length: totalCampaignPages }, (_, index) => index + 1).map((pageNumber) => (
+                    <button
+                      key={pageNumber}
+                      onClick={() => goToCampaignPage(pageNumber)}
+                      aria-current={campaignPage === pageNumber ? 'page' : undefined}
+                      className={`rounded-lg border px-3 py-2 text-sm transition-colors ${campaignPage === pageNumber ? 'border-blue-500 bg-blue-600 text-white' : 'border-slate-600 bg-slate-700 text-slate-100 hover:bg-slate-600'}`}
+                    >
+                      {pageNumber}
+                    </button>
+                  ))}
+
+                  <button
+                    onClick={() => goToCampaignPage(Math.min(totalCampaignPages, campaignPage + 1))}
+                    disabled={campaignPage === totalCampaignPages}
+                    className={`rounded-lg border px-3 py-2 text-sm transition-colors ${campaignPage === totalCampaignPages ? 'cursor-not-allowed border-slate-700 text-slate-500' : 'border-slate-600 bg-slate-700 text-slate-100 hover:bg-slate-600'}`}
+                  >
+                    Next
+                  </button>
+                </div>
+              )}
             </CardContent>
           </Card>
         </section>
