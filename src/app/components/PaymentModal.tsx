@@ -644,26 +644,11 @@ export function PaymentModal({
               }
               clearTimeout(snapTimeoutHandle);
               console.info('Midtrans onPending', { result, donationId: donationIdForCallback, orderId: orderIdForCallback });
-              
-              // Hanya simpan pending jika user punya akun (user?.email ada)
-              if (!user?.email) {
-                // User tanpa akun: langsung cancel pembayaran
-                fetch(`${apiBaseUrl}/api/payments/cancel`, {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    Authorization: `Bearer ${localStorage.getItem('token') || ''}`
-                  },
-                  body: JSON.stringify({ donationId: donationIdForCallback })
-                }).catch(err => console.error('Auto-cancel failed:', err));
-                
-                safeSetError('Pembayaran tanpa akun tidak dapat disimpan sebagai pending. Silakan donasi dengan akun untuk dapat track pembayaran.');
-                return;
-              }
-              
-              // User dengan akun: simpan ke pending payments
+
+              // Simpan pending payment agar tetap bisa dilanjutkan dari halaman resume.
               const redirectUrlValue = String(result.redirect_url || result.url || '');
               console.info('Saving pending payment with redirectUrl:', { redirectUrlValue });
+              const ownerEmail = String(user?.email || donorEmail || '').trim();
               
               const pendingPaymentData = {
                 donationId: Number(donationIdForCallback || 0),
@@ -673,7 +658,7 @@ export function PaymentModal({
                 method: paymentMethod,
                 redirectUrl: redirectUrlValue,
                 transactionToken: tokenToUse,
-                ownerEmail: user.email,
+                ownerEmail: ownerEmail || undefined,
                 createdAt: Date.now(),
                 updatedAt: Date.now()
               };

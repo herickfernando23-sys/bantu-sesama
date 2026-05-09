@@ -89,13 +89,6 @@ const removePendingPayment = (donationId: string | number, orderId: string) => {
 
 export function ContinuePaymentPage({ onHome, user }: { onHome: () => void; user?: { name: string; email?: string } | null }) {
   const query = useMemo(getQueryDetails, []);
-  
-  // Redirect ke home jika user tidak punya akun
-  useEffect(() => {
-    if (!user?.email) {
-      onHome();
-    }
-  }, [user?.email, onHome]);
   const [status, setStatus] = useState<string>('pending');
   const [message, setMessage] = useState('Halaman ini dipakai untuk melanjutkan pembayaran yang masih pending.');
   const [loading, setLoading] = useState(false);
@@ -254,6 +247,11 @@ export function ContinuePaymentPage({ onHome, user }: { onHome: () => void; user
   };
 
   const cancelPayment = async () => {
+    if (!user?.email) {
+      setError('Silakan login untuk membatalkan pembayaran dari halaman ini.');
+      return;
+    }
+
     const donationIdNum = Number(query.donationId || 0);
     if (!query.donationId || donationIdNum === 0) {
       setError('Donation ID belum tersedia untuk pembatalan.');
@@ -418,7 +416,7 @@ export function ContinuePaymentPage({ onHome, user }: { onHome: () => void; user
               <button
                 type="button"
                 onClick={cancelPayment}
-                disabled={canceling}
+                disabled={canceling || !user?.email}
                 className="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-2xl border border-rose-200 bg-rose-50 px-5 py-4 text-sm font-semibold text-rose-700 transition hover:bg-rose-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {canceling ? <Loader className="h-4 w-4 animate-spin" /> : <XCircle className="h-4 w-4" />}

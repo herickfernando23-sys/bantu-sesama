@@ -1137,9 +1137,16 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     saveUserSessionToStorage(user);
   }, [user]);
 
-  const _userEmail = user?.email ?? null;
+  const _userEmail = (user?.email || null);
   const visiblePendingPayments = _userEmail
-    ? pendingPayments.filter((payment) => !payment.ownerEmail || payment.ownerEmail === _userEmail)
+    ? pendingPayments.filter((payment) => {
+        if (!payment.ownerEmail) return true;
+        try {
+          return String(payment.ownerEmail).toLowerCase() === String(_userEmail).toLowerCase();
+        } catch {
+          return false;
+        }
+      })
     : [];
 
   const recurringDonationStatus = getRecurringDonationForEmail(user?.email);
@@ -1439,6 +1446,36 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     setProfileEditName(user?.name ?? '');
     setProfileEditMessage('');
   }, [user?.email, user?.name, page]);
+
+  // Assign any pending payments without ownerEmail to the logged-in user
+  useEffect(() => {
+    if (!user?.email) return;
+
+    try {
+      const raw = window.localStorage.getItem(pendingPaymentsKey) || '[]';
+      const parsed = JSON.parse(raw) as PendingPaymentRecord[];
+      if (!Array.isArray(parsed) || parsed.length === 0) return;
+
+      let changed = false;
+      const next = parsed.map((p) => {
+        if (!p.ownerEmail) {
+          changed = true;
+          return { ...p, ownerEmail: user.email };
+        }
+        return p;
+      });
+
+      if (changed) {
+        window.localStorage.setItem(pendingPaymentsKey, JSON.stringify(next));
+        // update local state too so UI updates immediately
+        setPendingPayments(next);
+        // dispatch storage event for other tabs/components
+        window.dispatchEvent(new StorageEvent('storage', { key: pendingPaymentsKey, newValue: JSON.stringify(next) }));
+      }
+    } catch (err) {
+      // ignore
+    }
+  }, [user?.email]);
 
   // Routing utama
   if (page === 'donasi-saya') {
