@@ -10,6 +10,7 @@ module.exports = async function (req, res, next) {
     const user = await User.findByPk(payload.id);
     if (!user) return res.status(401).json({ message: 'Invalid token' });
     req.user = user;
+    req.userId = user.id;
     next();
   } catch (err) {
     res.status(401).json({ message: 'Invalid token' });

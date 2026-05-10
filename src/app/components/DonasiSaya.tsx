@@ -1,3 +1,4 @@
+import { useEffect } from 'react';
 import { Heart, Calendar, TrendingUp } from 'lucide-react';
 
 interface DonasiSayaProps {
@@ -14,6 +15,10 @@ interface DonasiSayaProps {
 }
 
 export function DonasiSaya({ user, onLogin, donations = [] }: DonasiSayaProps) {
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   if (!user) {
     return (
       <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">

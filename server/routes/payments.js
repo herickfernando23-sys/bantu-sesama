@@ -48,8 +48,18 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
     if (!donorEmail || !donorEmail.trim()) {
       return res.status(400).json({ error: 'Email donor harus diisi' });
     }
-    if (!amount || Number(amount) < 10000) {
-      return res.status(400).json({ error: 'Nominal donasi minimal Rp 10.000' });
+    
+    // Validate amount based on recurring type
+    const minAmount = ['monthly', 'yearly'].includes(recurringType) ? 50000 : 10000;
+    if (!amount || Number(amount) < minAmount) {
+      return res.status(400).json({ 
+        error: `Nominal donasi minimal Rp ${minAmount.toLocaleString('id-ID')} untuk donasi ${recurringType}` 
+      });
+    }
+
+    // Validate recurring type
+    if (!['one-time', 'monthly', 'yearly'].includes(recurringType)) {
+      return res.status(400).json({ error: 'recurringType tidak valid (one-time, monthly, or yearly)' });
     }
 
     // Validate campaign exists
@@ -113,7 +123,9 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
       phone: '08111111111' // Placeholder
     };
 
-    const rawItemName = `Donasi untuk ${campaign.title}`;
+    const rawItemName = ['monthly', 'yearly'].includes(recurringType) 
+      ? `Donasi Rutin ${recurringType} - ${campaign.title}`
+      : `Donasi untuk ${campaign.title}`;
     const itemName = rawItemName.length > 50 ? rawItemName.slice(0, 50) : rawItemName;
 
     const itemDetails = [

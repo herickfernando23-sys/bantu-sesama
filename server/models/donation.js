@@ -77,6 +77,11 @@ module.exports = (sequelize) => {
     processedAt: { 
       type: DataTypes.DATE, 
       allowNull: true 
+    },
+    parentRecurringDonationId: {
+      type: DataTypes.INTEGER,
+      allowNull: true,
+      references: { model: 'Donations', key: 'id' }
     }
   }, {
     timestamps: true,
@@ -84,7 +89,8 @@ module.exports = (sequelize) => {
       { fields: ['campaignId', 'paymentStatus'] },
       { fields: ['userId'] },
       { fields: ['stripePaymentIntentId'] },
-      { fields: ['midtransTransactionId'] }
+      { fields: ['midtransTransactionId'] },
+      { fields: ['parentRecurringDonationId'] }
     ]
   });
 };

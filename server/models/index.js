@@ -40,6 +40,10 @@ Category.belongsToMany(Campaign, { through: CampaignCategory });
 User.hasMany(ChatbotInteraction, { foreignKey: 'userId' });
 ChatbotInteraction.belongsTo(User, { foreignKey: 'userId' });
 
+// Self-referencing: Donation -> ParentRecurringDonation (for recurring donation tracking)
+Donation.hasMany(Donation, { foreignKey: 'parentRecurringDonationId', as: 'ChargedDonations' });
+Donation.belongsTo(Donation, { foreignKey: 'parentRecurringDonationId', as: 'ParentDonation' });
+
 module.exports = {
   sequelize,
   User,

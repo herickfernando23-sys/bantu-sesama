@@ -3,6 +3,7 @@ require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
+const cron = require('node-cron');
 const { sequelize } = require('./models');
 
 const authRoutes = require('./routes/auth');
@@ -10,6 +11,8 @@ const campaignRoutes = require('./routes/campaigns');
 const paymentRoutes = require('./routes/payments');
 const chatbotRoutes = require('./routes/chatbot');
 const donationRoutes = require('./routes/donations');
+const recurringRoutes = require('./routes/recurring');
+const recurringService = require('./services/recurringPaymentService');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -121,12 +124,55 @@ app.use('/api/campaigns', campaignRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/donations', donationRoutes);
+app.use('/api/recurring', recurringRoutes);
 
 const PORT = process.env.PORT || 4000;
+
+// Global cron job reference for recurring donations
+let recurringCronJob = null;
+
+/**
+ * Setup cron job untuk process recurring donations
+ * Runs every day at 02:00 AM (UTC) = 9:00 AM WIB
+ * Format: minute hour day month dayOfWeek
+ */
+function setupRecurringCronJob() {
+  try {
+    // Run setiap hari jam 2 pagi UTC (9 pagi WIB)
+    recurringCronJob = cron.schedule('0 2 * * *', async () => {
+      console.log('[Cron] Starting daily recurring donation processing...');
+      try {
+        const result = await recurringService.processRecurringDonations();
+        console.log('[Cron] Recurring donation processing completed:', result);
+      } catch (err) {
+        console.error('[Cron] Error processing recurring donations:', err);
+      }
+    });
+
+    console.log('[Cron] Recurring donation cron job scheduled (daily at 02:00 UTC)');
+
+    // Alternative: untuk testing, uncomment ini untuk run setiap menit
+    // recurringCronJob = cron.schedule('*/1 * * * *', async () => {
+    //   console.log('[Cron] Processing recurring donations...');
+    //   try {
+    //     const result = await recurringService.processRecurringDonations();
+    //     console.log('[Cron] Result:', result);
+    //   } catch (err) {
+    //     console.error('[Cron] Error:', err);
+    //   }
+    // });
+  } catch (err) {
+    console.error('[Cron] Failed to setup recurring cron job:', err);
+  }
+}
 
 async function start() {
   try {
     await sequelize.sync({ alter: true });
+    
+    // Setup recurring donations scheduler
+    setupRecurringCronJob();
+    
     app.listen(PORT, () => {
       console.log(`Backend running on port ${PORT}`);
     });
