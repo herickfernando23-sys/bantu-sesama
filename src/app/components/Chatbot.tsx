@@ -8,7 +8,27 @@ interface Message {
   timestamp: Date;
 }
 
-const apiBaseUrl = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:8080').replace(/\/$/, '');
+interface ChatbotResponsePayload {
+  response?: string;
+  needsClarification?: boolean;
+  suggestions?: string[];
+}
+
+function resolveApiBaseUrl() {
+  const envBaseUrl = String((import.meta as any).env?.VITE_API_URL || '').trim();
+
+  if (envBaseUrl) {
+    return envBaseUrl.replace(/\/$/, '');
+  }
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin.replace(/\/$/, '');
+  }
+
+  return 'http://localhost:8080';
+}
+
+const apiBaseUrl = resolveApiBaseUrl();
 
 export function Chatbot() {
   const [isOpen, setIsOpen] = useState(false);
@@ -39,8 +59,15 @@ export function Chatbot() {
         throw new Error('Gagal mendapatkan respons dari chatbot');
       }
 
-      const data = await response.json();
-      return data.response || 'Maaf, terjadi kesalahan. Silakan coba lagi.';
+      const data = (await response.json()) as ChatbotResponsePayload;
+      const suggestions = Array.isArray(data.suggestions) ? data.suggestions : [];
+      const responseText = String(data.response || 'Maaf, terjadi kesalahan. Silakan coba lagi.');
+      const alreadyHasExamples = /contoh pertanyaan|•\s+/i.test(responseText);
+      const suggestionBlock = data.needsClarification && suggestions.length > 0 && !alreadyHasExamples
+        ? `\n\nContoh pertanyaan:\n${suggestions.map((item) => `• ${item}`).join('\n')}`
+        : '';
+
+      return `${responseText}${suggestionBlock}`;
     } catch (error) {
       console.error('Chatbot API error:', error);
       return 'Maaf, terjadi kesalahan saat memproses pertanyaan Anda. Silakan hubungi tim support kami atau coba lagi nanti.';

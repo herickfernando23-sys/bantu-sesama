@@ -83,9 +83,79 @@ const knowledgeBase = {
   }
 };
 
+const clarificationSuggestions = [
+  'Cara donasi ke kampanye tertentu',
+  'Gimana bayar pakai VA atau e-wallet',
+  'Help lihat transparansi dana',
+  'Cara buat kampanye baru',
+  'Donasi rutin itu bagaimana?'
+];
+
+const fallbackClarificationResponse = [
+  'Maaf, saya belum memahami pertanyaan Anda dengan sempurna. 🤔',
+  '',
+  'Saya bisa membantu tentang:',
+  '• Cara donasi',
+  '• Membuat kampanye',
+  '• Metode pembayaran',
+  '• Transparansi dana',
+  '• Keamanan platform',
+  '• Donasi rutin',
+  '• Biaya admin',
+  '• Hubungi support',
+  '',
+  'Silakan rephrase pertanyaan Anda atau hubungi tim support kami.'
+].join('\n');
+
+function buildChatbotPayload({ message, response, confidence, source, sessionId, aiModel, needsClarification = false, suggestions = [] }) {
+  const payload = {
+    message: String(message || ''),
+    response: String(response || ''),
+    confidence: typeof confidence === 'number' ? confidence : 0,
+    source: source || 'kb',
+    timestamp: new Date().toISOString(),
+    needsClarification,
+    suggestions
+  };
+
+  if (aiModel) {
+    payload.aiModel = aiModel;
+  }
+
+  if (sessionId) {
+    payload.sessionId = sessionId;
+  }
+
+  return payload;
+}
+
+function persistChatbotInteraction({ message, response, source, sessionId, aiModel, helpful }) {
+  if (!ChatbotInteraction) {
+    return;
+  }
+
+  const interaction = {
+    message: String(message || ''),
+    response: String(response || ''),
+    source: source || 'kb',
+    sessionId: sessionId || null
+  };
+
+  if (aiModel) {
+    interaction.aiModel = aiModel;
+  }
+
+  if (typeof helpful === 'boolean') {
+    interaction.helpful = helpful;
+  }
+
+  ChatbotInteraction.create(interaction).catch(() => {});
+}
+
 // Helper function to get KB response
 function getKnowledgeBaseResponse(message) {
   const lowerMessage = String(message).toLowerCase().trim();
+
   let response = null;
   let confidence = 0;
 
@@ -100,11 +170,41 @@ function getKnowledgeBaseResponse(message) {
   }
 
   if (!response) {
-    response = 'Maaf, saya belum memahami pertanyaan Anda dengan sempurna. 🤔\n\nSaya bisa membantu tentang:\n• Cara donasi\n• Membuat kampanye\n• Metode pembayaran\n• Transparansi dana\n• Keamanan platform\n• Donasi rutin\n• Biaya admin\n• Hubungi support\n\nSilakan rephrase pertanyaan Anda atau hubungi tim support kami.';
+    const genericOnlyTriggers = [
+      'cara',
+      'gimana',
+      'gmn',
+      'help',
+      'tolong',
+      'bantu',
+      'bantuan',
+      'apa',
+      'bagaimana',
+      'donasi',
+      'kampanye',
+      'payment',
+      'bayar',
+      'transparansi',
+      'rutin'
+    ];
+
+    const words = lowerMessage.split(/\s+/).filter(Boolean);
+    const isTooGeneric = lowerMessage.length < 8 || words.length <= 2 && genericOnlyTriggers.some((trigger) => lowerMessage === trigger);
+
+    if (isTooGeneric) {
+      return {
+        response: fallbackClarificationResponse,
+        confidence: 0,
+        needsClarification: true,
+        suggestions: []
+      };
+    }
+
+    response = fallbackClarificationResponse;
     confidence = 0;
   }
 
-  return { response, confidence };
+  return { response, confidence, needsClarification: false, suggestions: [] };
 }
 
 /**
@@ -123,26 +223,31 @@ router.get('/response', (req, res) => {
       });
     }
 
-    const { response, confidence } = getKnowledgeBaseResponse(message);
+    const kbResult = getKnowledgeBaseResponse(message);
 
-    // Persist interaction (best-effort)
-    if (ChatbotInteraction) {
-      ChatbotInteraction.create({ message: String(message), response: String(response), source: 'kb', sessionId }).catch(() => {});
-    }
+    persistChatbotInteraction({ message, response: kbResult.response, source: 'kb', sessionId });
 
-    res.json({
+    res.json(buildChatbotPayload({
       message,
-      response,
-      confidence,
+      response: kbResult.response,
+      confidence: kbResult.confidence,
       source: 'kb',
-      timestamp: new Date().toISOString()
-    });
+      sessionId,
+      needsClarification: kbResult.needsClarification,
+      suggestions: kbResult.suggestions
+    }));
   } catch (error) {
     console.error('Chatbot response error:', error);
-    res.status(500).json({
-      error: 'Terjadi kesalahan pada server',
-      response: 'Maaf, terjadi kesalahan. Silakan coba lagi nanti atau hubungi support kami.'
-    });
+    const fallback = getKnowledgeBaseResponse(req.query.message || '');
+    res.status(200).json(buildChatbotPayload({
+      message: req.query.message || '',
+      response: fallback.response,
+      confidence: fallback.confidence,
+      source: 'kb',
+      sessionId: (req.query.sessionId || req.query.session_id) ? String(req.query.sessionId || req.query.session_id) : undefined,
+      needsClarification: fallback.needsClarification,
+      suggestions: fallback.suggestions
+    }));
   }
 });
 
@@ -161,9 +266,19 @@ router.get('/nlp', async (req, res) => {
 
     const GEMINI_KEY = process.env.GEMINI_API_KEY;
 
-    // Require Gemini key — do not fallback to KB when disabled
+    // If Gemini is not configured, fall back to the knowledge base so the chatbot still works.
     if (!GEMINI_KEY) {
-      return res.status(503).json({ error: 'GEMINI_API_KEY not configured' });
+      const kbResult = getKnowledgeBaseResponse(message);
+      persistChatbotInteraction({ message, response: kbResult.response, source: 'kb', sessionId });
+      return res.json(buildChatbotPayload({
+        message,
+        response: kbResult.response,
+        confidence: kbResult.confidence,
+        source: 'kb',
+        sessionId,
+        needsClarification: kbResult.needsClarification,
+        suggestions: kbResult.suggestions
+      }));
     }
 
     // Acquire a token before calling Gemini to respect local rate limits
@@ -184,11 +299,16 @@ router.get('/nlp', async (req, res) => {
 
         if (!content.trim()) throw new Error('Empty response from Gemini');
 
-        if (ChatbotInteraction) {
-          ChatbotInteraction.create({ message: String(message), response: String(content).trim(), source: 'nlp', aiModel: 'gemini-2.5-flash', sessionId }).catch(() => {});
-        }
+        persistChatbotInteraction({ message, response: String(content).trim(), source: 'nlp', aiModel: 'gemini-2.5-flash', sessionId });
 
-        return res.json({ message, response: String(content).trim(), confidence: 1, source: 'nlp', aiModel: 'gemini-2.5-flash' });
+        return res.json(buildChatbotPayload({
+          message,
+          response: String(content).trim(),
+          confidence: 1,
+          source: 'nlp',
+          aiModel: 'gemini-2.5-flash',
+          sessionId
+        }));
       } catch (geminiErr) {
         lastErr = geminiErr;
         // If the API returned RetryInfo, parse it and wait that long before retrying
@@ -219,15 +339,31 @@ router.get('/nlp', async (req, res) => {
       }
     }
 
-    console.error('Gemini API error (no KB fallback):', lastErr);
-    return res.status(502).json({ error: 'Gemini API error', message: lastErr && lastErr.message ? lastErr.message : String(lastErr) });
+    console.error('Gemini API error, falling back to KB:', lastErr);
+    const kbResult = getKnowledgeBaseResponse(message);
+    persistChatbotInteraction({ message, response: kbResult.response, source: 'kb', sessionId });
+    return res.json(buildChatbotPayload({
+      message,
+      response: kbResult.response,
+      confidence: kbResult.confidence,
+      source: 'kb',
+      sessionId,
+      needsClarification: kbResult.needsClarification,
+      suggestions: kbResult.suggestions
+    }));
   } catch (error) {
     console.error('Chatbot NLP error:', error);
-    const { response, confidence } = getKnowledgeBaseResponse(req.query.message || '');
-    if (ChatbotInteraction) {
-      ChatbotInteraction.create({ message: String(req.query.message || ''), response: String(response), source: 'kb', sessionId }).catch(() => {});
-    }
-    return res.json({ message: req.query.message || '', response, confidence, source: 'kb', timestamp: new Date().toISOString() });
+    const kbResult = getKnowledgeBaseResponse(req.query.message || '');
+    persistChatbotInteraction({ message: req.query.message || '', response: kbResult.response, source: 'kb', sessionId });
+    return res.json(buildChatbotPayload({
+      message: req.query.message || '',
+      response: kbResult.response,
+      confidence: kbResult.confidence,
+      source: 'kb',
+      sessionId,
+      needsClarification: kbResult.needsClarification,
+      suggestions: kbResult.suggestions
+    }));
   }
 });
 
