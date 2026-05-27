@@ -31,7 +31,7 @@ interface CampaignDetailProps {
   onBack: () => void;
   onUpdateCampaign?: (campaignId: number, updates: Partial<Campaign>) => void;
   onRequestWithdrawal?: (campaignId: number, request: { amount: number; note: string }) => void;
-  onDonationSuccess?: (amount: number, donorInfo: {name: string; message: string}) => void;
+  onDonationSuccess?: (amount: number, donorInfo: {name: string; message: string; tip?: number}) => void;
   onNavigateToContinuePayment?: (payment: {
     donationId: number;
     orderId: string;

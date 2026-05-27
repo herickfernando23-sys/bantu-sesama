@@ -12,6 +12,8 @@ const paymentRoutes = require('./routes/payments');
 const chatbotRoutes = require('./routes/chatbot');
 const donationRoutes = require('./routes/donations');
 const recurringRoutes = require('./routes/recurring');
+const tipsRoutes = require('./routes/tips');
+const sponsorBannersRoutes = require('./routes/sponsor_banners');
 const recurringService = require('./services/recurringPaymentService');
 
 const app = express();
@@ -125,6 +127,11 @@ app.use('/api/payments', paymentRoutes);
 app.use('/api/chatbot', chatbotRoutes);
 app.use('/api/donations', donationRoutes);
 app.use('/api/recurring', recurringRoutes);
+app.use('/api/tips', tipsRoutes);
+app.use('/api/sponsor-banners', sponsorBannersRoutes);
+
+// Serve uploaded files
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const PORT = process.env.PORT || 4000;
 
@@ -168,11 +175,15 @@ function setupRecurringCronJob() {
 
 async function start() {
   try {
-    await sequelize.sync({ alter: true });
-    
+    try {
+      await sequelize.sync({ alter: true });
+    } catch (err) {
+      console.error('Failed to sync DB (continuing without sync):', err && err.message ? err.message : err);
+    }
+
     // Setup recurring donations scheduler
     setupRecurringCronJob();
-    
+
     app.listen(PORT, () => {
       console.log(`Backend running on port ${PORT}`);
     });

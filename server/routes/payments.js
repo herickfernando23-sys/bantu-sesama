@@ -32,6 +32,7 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
   try {
     const {
       amount,
+      tipAmount = 0,
       campaignId,
       recurringType = 'one-time',
       donorName,
@@ -98,6 +99,24 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
       message
     });
 
+    // Create tip record if provided
+    let tipRecord = null;
+    const numericTip = Math.round(Number(tipAmount || 0));
+    if (numericTip > 0) {
+      const Tip = sequelize.models.Tip;
+      tipRecord = await Tip.create({
+        userId,
+        amount: numericTip,
+        currency: 'IDR',
+        paymentStatus: 'pending',
+        paymentMethod: paymentMethod,
+        donorName: isAnonymous ? 'Anonymous' : donorName,
+        donorEmail,
+        isAnonymous,
+        message: 'Tips sukarela untuk operasional platform'
+      });
+    }
+
     if (isDemoPaymentMode) {
       // Demo mode untuk testing
       return res.json({
@@ -111,9 +130,10 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
 
     // Midtrans transaction parameters
     const numericAmount = Math.round(Number(amount));
+    const numericTipAmount = Math.round(Number(tipAmount || 0));
     const transactionDetails = {
       order_id: `ORDER-${donation.id}`,
-      gross_amount: numericAmount
+      gross_amount: numericAmount + numericTipAmount
     };
 
     const customerDetails = {
@@ -136,6 +156,15 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
         name: itemName
       }
     ];
+
+    if (numericTipAmount > 0) {
+      itemDetails.push({
+        id: `tip_platform`,
+        price: numericTipAmount,
+        quantity: 1,
+        name: 'Tips Sukarela untuk Operasional Platform'
+      });
+    }
 
     const itemTotal = itemDetails.reduce((sum, item) => sum + (Number(item.price) * Number(item.quantity)), 0);
     transactionDetails.gross_amount = itemTotal;
@@ -204,6 +233,11 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
     donation.midtransTransactionId = orderId;
     await donation.save();
 
+    if (tipRecord) {
+      tipRecord.midtransTransactionId = orderId;
+      await tipRecord.save();
+    }
+
     res.json({
       transactionToken,
       transactionId: donation.midtransTransactionId,
@@ -222,111 +256,199 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
 });
 
 /**
- * POST /api/payments/confirm
- * Confirm payment after transaction success
+ * POST /api/payments/create-tip-intent
+ * Create Midtrans transaction for a platform tip (standalone)
  */
+router.post('/create-tip-intent', optionalAuth, async (req, res) => {
+  let tip = null;
+  try {
+    const { amount, donorName, donorEmail, isAnonymous = false, message = '', paymentMethod = 'ewallet' } = req.body;
+    console.log('[CreateTipIntent] incoming', { amount, donorName, donorEmail, isAnonymous, paymentMethod });
+
+    if (!donorName || !donorName.trim()) return res.status(400).json({ error: 'Nama donor harus diisi' });
+    if (!donorEmail || !donorEmail.trim()) return res.status(400).json({ error: 'Email donor harus diisi' });
+
+    const numericAmount = Math.round(Number(amount || 0));
+    if (!numericAmount || numericAmount < 1000) return res.status(400).json({ error: 'Jumlah tip tidak valid' });
+
+    // Ensure user exists
+    let userId = req.user?.id || null;
+    if (!userId) {
+      let donorUser = await User.findOne({ where: { email: donorEmail } });
+      if (!donorUser) {
+        donorUser = await User.create({ name: donorName || 'Donor', email: donorEmail, password: `donor_${Date.now()}` });
+      }
+      userId = donorUser.id;
+    }
+
+    const Tip = sequelize.models.Tip;
+    tip = await Tip.create({ userId, amount: numericAmount, currency: 'IDR', paymentStatus: 'pending', paymentMethod, donorName: isAnonymous ? 'Anonymous' : donorName, donorEmail, isAnonymous, message });
+
+    const orderId = `ORDER-TIP-${tip.id}`;
+    const canUseMidtrans = !isDemoPaymentMode && midtransServerKey && midtransClientKey;
+
+    if (!canUseMidtrans) {
+      tip.midtransTransactionId = orderId;
+      await tip.save();
+      return res.json({ transactionToken: `DEMO_TIP_${tip.id}_${Date.now()}`, transactionId: `demo_tip_${tip.id}`, tipId: tip.id, demoMode: true, orderId });
+    }
+
+    const transactionDetails = { order_id: orderId, gross_amount: numericAmount };
+    const customerDetails = { first_name: isAnonymous ? 'Anonymous' : donorName.split(' ')[0], last_name: isAnonymous ? 'Donor' : (donorName.split(' ').slice(1).join(' ') || ''), email: donorEmail, phone: '08111111111' };
+
+    const itemDetails = [{ id: `tip_${tip.id}`, price: numericAmount, quantity: 1, name: 'Tips Sukarela untuk Operasional Platform' }];
+
+    const enabledPayments = paymentMethod === 'ewallet' ? ['gopay', 'shopeepay'] : (paymentMethod === 'virtual_account' ? ['bank_transfer'] : ['bank_transfer', 'gopay', 'shopeepay', 'credit_card']);
+
+    const parameter = { transaction_details: transactionDetails, customer_details: customerDetails, item_details: itemDetails, enabled_payments: enabledPayments, custom_field1: `Tip: ${isAnonymous ? 'Anonymous' : donorName}` };
+
+    let transaction;
+    try {
+      transaction = await snap.createTransaction(parameter);
+    } catch (err) {
+      console.error('Create tip transaction error', err);
+      throw err;
+    }
+
+    const transactionToken = transaction.token;
+    tip.midtransTransactionId = orderId;
+    await tip.save();
+
+    res.json({ transactionToken, transactionId: tip.midtransTransactionId, tipId: tip.id, orderId, amount: numericAmount, demoMode: false });
+  } catch (err) {
+    console.error('create-tip-intent error', err);
+
+    try {
+      if (tip) {
+        const fallbackOrderId = `ORDER-TIP-${tip.id}`;
+        tip.midtransTransactionId = fallbackOrderId;
+        await tip.save();
+        return res.json({ transactionToken: `DEMO_TIP_${tip.id}_${Date.now()}`, transactionId: fallbackOrderId, tipId: tip.id, demoMode: true, orderId: fallbackOrderId });
+      }
+    } catch (fallbackErr) {
+      console.error('create-tip-intent fallback failed:', fallbackErr);
+    }
+
+    res.status(500).json({ error: err.message || 'Failed to create tip intent' });
+  }
+});
 router.post('/confirm', optionalAuth, async (req, res) => {
   try {
-    const { transactionId, donationId, orderId, transactionStatus } = req.body;
+    const { transactionId, donationId, tipId, orderId, transactionStatus } = req.body;
 
-    if (!donationId) {
-      return res.status(400).json({ error: 'Donation ID required' });
-    }
+    // Donation confirmation path
+    if (donationId) {
+      const donation = await Donation.findByPk(donationId);
+      if (!donation) return res.status(404).json({ error: 'Donation not found' });
 
-    const donation = await Donation.findByPk(donationId);
-    if (!donation) {
-      return res.status(404).json({ error: 'Donation not found' });
-    }
+      const callbackStatus = String(transactionStatus || '').toLowerCase();
+      const statusMeansSuccess = callbackStatus === 'settlement' || callbackStatus === 'capture' || callbackStatus === 'success';
+      const statusMeansPending = callbackStatus === 'pending' || callbackStatus === 'authorize';
 
-    const callbackStatus = String(transactionStatus || '').toLowerCase();
-    const statusMeansSuccess = callbackStatus === 'settlement' || callbackStatus === 'capture' || callbackStatus === 'success';
-    const statusMeansPending = callbackStatus === 'pending' || callbackStatus === 'authorize';
+      if (isDemoPaymentMode) {
+        donation.paymentStatus = 'succeeded';
+        await donation.save();
+        const campaign = await Campaign.findByPk(donation.campaignId);
+        campaign.collected = (Number(campaign.collected) || 0) + Number(donation.amount || 0);
+        await campaign.save();
+        return res.json({ success: true, paymentStatus: 'succeeded', orderId, message: 'Demo payment simulasi berhasil' });
+      }
 
-    if (isDemoPaymentMode) {
-      // Demo mode: mark as succeeded
-      donation.paymentStatus = 'succeeded';
-      await donation.save();
+      if (!donation.midtransTransactionId) return res.status(400).json({ error: 'Donation transaction not found' });
 
-      // Update campaign collected amount
-      const campaign = await Campaign.findByPk(donation.campaignId);
-      const currentCollected = Number(campaign.collected) || 0;
-      const donationAmount = Number(donation.amount) || 0;
-      campaign.collected = currentCollected + donationAmount;
-      await campaign.save();
-
-      return res.json({
-        success: true,
-        paymentStatus: 'succeeded',
-        orderId,
-        message: 'Demo payment simulasi berhasil'
-      });
-    }
-
-    // For real Midtrans: verify transaction with server
-    if (donation.midtransTransactionId) {
       const previousStatus = donation.paymentStatus;
       let transaction = null;
-
       try {
         transaction = await snap.transaction.status(donation.midtransTransactionId);
-        console.log('[Confirm] Midtrans status response for', donation.midtransTransactionId, ':', JSON.stringify(transaction, null, 2));
-      } catch (error) {
-        console.error('Midtrans verification error:', error);
-
-        if (statusMeansSuccess) {
-          transaction = { transaction_status: callbackStatus || 'settlement' };
-        } else if (statusMeansPending) {
-          transaction = { transaction_status: 'pending' };
-        } else {
+      } catch (err) {
+        if (statusMeansSuccess) transaction = { transaction_status: callbackStatus || 'settlement' };
+        else if (statusMeansPending) transaction = { transaction_status: 'pending' };
+        else {
           donation.paymentStatus = 'processing';
           await donation.save();
-
-          return res.json({
-            success: false,
-            paymentStatus: 'processing',
-            orderId,
-            warning: 'Midtrans verification failed; donation set to processing. Please check webhook or try verifying later.'
-          });
+          return res.json({ success: false, paymentStatus: 'processing', orderId, warning: 'Midtrans verification failed; donation set to processing.' });
         }
       }
 
-      // Update donation status berdasarkan Midtrans response
-      if (statusMeansSuccess || transaction.transaction_status === 'settlement' || transaction.transaction_status === 'capture') {
-        donation.paymentStatus = 'succeeded';
-      } else if (statusMeansPending || transaction.transaction_status === 'pending') {
-        donation.paymentStatus = 'processing';
-      } else if (transaction.transaction_status === 'deny' || transaction.transaction_status === 'failed' || transaction.transaction_status === 'cancel') {
-        donation.paymentStatus = 'failed';
-      }
+      if (statusMeansSuccess || transaction.transaction_status === 'settlement' || transaction.transaction_status === 'capture') donation.paymentStatus = 'succeeded';
+      else if (statusMeansPending || transaction.transaction_status === 'pending') donation.paymentStatus = 'processing';
+      else if (['deny', 'failed', 'cancel'].includes(transaction.transaction_status)) donation.paymentStatus = 'failed';
 
       if (donation.paymentStatus === 'succeeded' && previousStatus !== 'succeeded') {
         const campaign = await Campaign.findByPk(donation.campaignId);
-        // Convert collected to number before arithmetic
-        const currentCollected = Number(campaign.collected) || 0;
-        const donationAmount = Number(donation.amount) || 0;
-        campaign.collected = currentCollected + donationAmount;
+        campaign.collected = (Number(campaign.collected) || 0) + Number(donation.amount || 0);
         await campaign.save();
       }
 
-      await donation.save();
+      // Update linked Tip records (if any)
+      try {
+        const Tip = sequelize.models.Tip;
+        if (Tip) {
+          const tips = await Tip.findAll({ where: { midtransTransactionId: donation.midtransTransactionId } });
+          for (const t of tips) {
+            t.paymentStatus = donation.paymentStatus === 'succeeded' ? 'succeeded' : (donation.paymentStatus === 'processing' ? 'processing' : 'failed');
+            await t.save();
+          }
+        }
+      } catch (err) {
+        console.error('Failed to update linked Tip records:', err);
+      }
 
-      return res.json({
-        success: donation.paymentStatus === 'succeeded',
-        paymentStatus: donation.paymentStatus,
-        transactionStatus: transaction.transaction_status,
-        orderId
-      });
+      await donation.save();
+      return res.json({ success: donation.paymentStatus === 'succeeded', paymentStatus: donation.paymentStatus, transactionStatus: transaction.transaction_status, orderId });
     }
 
-    return res.status(400).json({
-      error: 'Transaction not found'
-    });
+    // Tip confirmation path
+    if (tipId || (orderId && String(orderId).startsWith('ORDER-TIP-'))) {
+      const TipModel = sequelize.models.Tip;
+      let tip = null;
+      if (tipId) tip = await TipModel.findByPk(tipId);
+      if (!tip && orderId) tip = await TipModel.findOne({ where: { midtransTransactionId: orderId } });
+      if (!tip) return res.status(404).json({ error: 'Tip not found' });
+
+      if (!tip.midtransTransactionId && orderId && String(orderId).startsWith('ORDER-TIP-')) {
+        tip.midtransTransactionId = orderId;
+        await tip.save();
+      }
+
+      if (isDemoPaymentMode) {
+        tip.paymentStatus = 'succeeded';
+        await tip.save();
+        return res.json({ success: true, paymentStatus: 'succeeded', orderId, message: 'Demo tip simulasi berhasil' });
+      }
+
+      if (!tip.midtransTransactionId) return res.status(400).json({ error: 'Tip transaction not found' });
+
+      const callbackStatus = String(transactionStatus || '').toLowerCase();
+      const statusMeansSuccess = callbackStatus === 'settlement' || callbackStatus === 'capture' || callbackStatus === 'success';
+      const statusMeansPending = callbackStatus === 'pending' || callbackStatus === 'authorize';
+
+      let transaction = null;
+      try {
+        transaction = await snap.transaction.status(tip.midtransTransactionId);
+      } catch (err) {
+        if (statusMeansSuccess) transaction = { transaction_status: callbackStatus || 'settlement' };
+        else if (statusMeansPending) transaction = { transaction_status: 'pending' };
+        else {
+          tip.paymentStatus = 'processing';
+          await tip.save();
+          return res.json({ success: false, paymentStatus: 'processing', orderId, warning: 'Midtrans verification failed; tip set to processing.' });
+        }
+      }
+
+      if (statusMeansSuccess || transaction.transaction_status === 'settlement' || transaction.transaction_status === 'capture') tip.paymentStatus = 'succeeded';
+      else if (statusMeansPending || transaction.transaction_status === 'pending') tip.paymentStatus = 'processing';
+      else if (['deny', 'failed', 'cancel'].includes(transaction.transaction_status)) tip.paymentStatus = 'failed';
+
+      await tip.save();
+      return res.json({ success: tip.paymentStatus === 'succeeded', paymentStatus: tip.paymentStatus, transactionStatus: transaction.transaction_status, orderId });
+    }
+
+    return res.status(400).json({ error: 'No donationId or tipId provided' });
 
   } catch (error) {
     console.error('Payment confirm error:', error);
-    res.status(500).json({
-      error: error.message || 'Failed to confirm payment'
-    });
+    res.status(500).json({ error: error.message || 'Failed to confirm payment' });
   }
 });
 

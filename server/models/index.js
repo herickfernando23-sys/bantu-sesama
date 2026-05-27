@@ -14,6 +14,8 @@ const Donation = require('./donation')(sequelize);
 const Comment = require('./comment')(sequelize);
 const Category = require('./category')(sequelize);
 const ChatbotInteraction = require('./chatbot_interaction')(sequelize);
+const Tip = require('./tip')(sequelize);
+const SponsorBanner = require('./sponsor_banner')(sequelize);
 
 const CampaignCategory = sequelize.define('CampaignCategory', {}, { timestamps: false });
 
@@ -52,5 +54,7 @@ module.exports = {
   Comment,
   Category,
   ChatbotInteraction,
-  CampaignCategory
+  CampaignCategory,
+  Tip,
+  SponsorBanner
 };

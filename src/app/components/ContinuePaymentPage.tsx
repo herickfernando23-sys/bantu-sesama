@@ -32,6 +32,7 @@ type PendingPaymentRecord = {
   orderId: string;
   campaignTitle: string;
   amount: number;
+  tipAmount?: number;
   method: 'virtual_account' | 'ewallet';
   transactionToken?: string;
   redirectUrl?: string;

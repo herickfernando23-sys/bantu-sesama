@@ -141,6 +141,293 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
     },
   ];
 
+  // Sponsorship banners (frontend-only management stored in localStorage)
+  const bannersKey = 'bantusesama-sponsor-banners';
+  type SponsorBanner = { id: number; title: string; link?: string; imageBase64: string; createdAt: number };
+  const apiBaseUrl = String((import.meta as any).env?.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
+  const resolveBannerImageSrc = (imageUrl: string) => {
+    if (!imageUrl) return '';
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('data:')) return imageUrl;
+    return `${apiBaseUrl}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+  };
+  const [banners, setBanners] = useState<SponsorBanner[]>(() => {
+    try {
+      const raw = window.localStorage.getItem(bannersKey);
+      return raw ? (JSON.parse(raw) as SponsorBanner[]) : [];
+    } catch {
+      return [] as SponsorBanner[];
+    }
+  });
+
+  const saveBanners = (next: SponsorBanner[]) => {
+    setBanners(next);
+    window.localStorage.setItem(bannersKey, JSON.stringify(next));
+  };
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const requestList = () => fetch(`${apiBaseUrl}/api/sponsor-banners`);
+        let resp = await requestList().catch(() => null);
+        if (!resp) {
+          resp = await fetch('/api/sponsor-banners').catch(() => null);
+        }
+        if (!resp || !resp.ok) return;
+
+        const list = await resp.json();
+        if (!Array.isArray(list) || cancelled) return;
+
+        const mapped: SponsorBanner[] = list.map((b: any) => ({
+          id: Number(b.id),
+          title: b.title,
+          link: b.link,
+          imageBase64: resolveBannerImageSrc(b.imageUrl),
+          createdAt: new Date(b.createdAt).getTime(),
+        }));
+        saveBanners(mapped);
+      } catch {
+        // ignore load errors and keep local snapshot
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [apiBaseUrl]);
+
+  const handleAddBanner = async (file: File, title: string, link?: string) => {
+    try {
+      const form = new FormData();
+      form.append('image', file);
+      form.append('title', title || 'Sponsor');
+      if (link) form.append('link', link);
+
+      const apiBaseUrl = String((import.meta as any).env?.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
+      const requestBannerUpload = () => fetch(`${apiBaseUrl}/api/sponsor-banners`, { method: 'POST', body: form });
+
+      let resp = await requestBannerUpload().catch(() => null);
+      if (!resp) {
+        resp = await fetch('/api/sponsor-banners', { method: 'POST', body: form });
+      }
+
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.error || 'Upload gagal');
+      }
+
+      const result = await resp.json();
+      const created = result.banner;
+      const next: SponsorBanner = {
+        id: created.id,
+        title: created.title,
+        link: created.link,
+        imageBase64: resolveBannerImageSrc(created.imageUrl),
+        createdAt: new Date(created.createdAt).getTime()
+      };
+      saveBanners([next, ...banners]);
+    } catch (err) {
+      alert('Gagal mengunggah banner: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  const handleDeleteBanner = async (id: number) => {
+    const next = banners.filter((b) => b.id !== id);
+
+    // Update UI immediately so a stale banner entry cannot block the action.
+    saveBanners(next);
+
+    try {
+      const numericId = Number(id);
+      if (!Number.isSafeInteger(numericId) || numericId <= 0) return;
+
+      let resp = await fetch(`${apiBaseUrl}/api/sponsor-banners/${numericId}`, { method: 'DELETE' }).catch(() => null);
+      if (!resp) {
+        resp = await fetch(`/api/sponsor-banners/${numericId}`, { method: 'DELETE' }).catch(() => null);
+      }
+
+      if (resp && !resp.ok && resp.status !== 404) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.error || 'Gagal menghapus banner');
+      }
+    } catch (err) {
+      console.error('Delete banner failed', err);
+    }
+  };
+
+  const BannerManager = () => {
+    const fileInputRef = useRef<HTMLInputElement | null>(null);
+    const [title, setTitle] = useState('');
+    const [link, setLink] = useState('');
+    const [file, setFile] = useState<File | null>(null);
+    const [preview, setPreview] = useState<string>('');
+
+    useEffect(() => {
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => setPreview(String(reader.result || ''));
+      reader.readAsDataURL(file);
+    }, [file]);
+
+    return (
+      <div className="space-y-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 items-end">
+          <div className="col-span-1 md:col-span-2">
+            <label className="block text-sm text-slate-300 mb-1">Judul Banner</label>
+            <input value={title} onChange={(e) => setTitle(e.target.value)} className="w-full px-3 py-2 rounded bg-slate-700 border border-slate-600 text-slate-100" />
+          </div>
+          <div>
+            <label className="block text-sm text-slate-300 mb-1">Link (opsional)</label>
+            <input value={link} onChange={(e) => setLink(e.target.value)} className="w-full px-3 py-2 rounded bg-slate-700 border border-slate-600 text-slate-100" />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            className="hidden"
+            onChange={(e) => setFile(e.target.files ? e.target.files[0] : null)}
+          />
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-100 hover:bg-slate-600"
+          >
+            Pilih Gambar
+          </button>
+          <span className="text-sm text-slate-400">
+            {file ? file.name : 'Belum ada file dipilih'}
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              if (!file) return alert('Pilih file gambar terlebih dahulu');
+              if (!title) return alert('Masukkan judul banner');
+              handleAddBanner(file, title, link || undefined);
+              setTitle(''); setLink(''); setFile(null); setPreview('');
+            }}
+            className="rounded-lg bg-blue-600 px-3 py-2 text-white"
+          >Unggah Banner</button>
+          {preview && <img src={preview} alt="preview" className="h-12 rounded object-cover border" />}
+        </div>
+
+        <div>
+          {banners.length === 0 ? (
+            <div className="text-slate-400">Belum ada banner sponsor.</div>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {banners.map((b) => (
+                <div key={b.id} className="flex items-center gap-3 rounded-lg border border-slate-700 p-3 bg-slate-800">
+                  <img src={resolveBannerImageSrc(b.imageBase64)} alt={b.title} className="w-28 h-16 object-cover rounded bg-slate-900" />
+                  <div className="flex-1">
+                    <div className="text-slate-100 font-semibold">{b.title}</div>
+                    <div className="text-slate-400 text-xs">{b.link || <span className="italic text-slate-500">Tanpa link</span>}</div>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <button type="button" onClick={() => window.open(b.link || '#', '_blank')} className="rounded px-2 py-1 bg-slate-700 text-slate-100 text-xs">Buka</button>
+                    <button type="button" onClick={(event) => { event.preventDefault(); event.stopPropagation(); handleDeleteBanner(b.id); }} className="rounded px-2 py-1 bg-red-600 text-white text-xs relative z-20 pointer-events-auto">Hapus</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  const TipsPanel = () => {
+    const [tips, setTips] = useState<Array<any>>([]);
+    const [loadingTips, setLoadingTips] = useState(false);
+    const [errorTips, setErrorTips] = useState('');
+    const [lastRefresh, setLastRefresh] = useState<number | null>(null);
+
+    const loadTips = async () => {
+      setLoadingTips(true);
+      setErrorTips('');
+      try {
+        const resp = await fetch('/api/tips');
+        if (!resp.ok) throw new Error('Gagal memuat tips');
+        const list = await resp.json();
+        setTips(list);
+        setLastRefresh(Date.now());
+      } catch (err) {
+        console.error('Load tips error', err);
+        setErrorTips(err instanceof Error ? err.message : 'Gagal memuat tips');
+      } finally {
+        setLoadingTips(false);
+      }
+    };
+
+    const deleteTip = async (tipId: number) => {
+      if (!window.confirm('Hapus tip ini dari daftar?')) return;
+      try {
+        const resp = await fetch(`/api/tips/${tipId}`, { method: 'DELETE' });
+        if (!resp.ok) {
+          const body = await resp.json().catch(() => ({}));
+          throw new Error(body.error || 'Gagal menghapus tip');
+        }
+        setTips((current) => current.filter((tip) => tip.id !== tipId));
+      } catch (err) {
+        alert('Gagal menghapus tip: ' + (err instanceof Error ? err.message : String(err)));
+      }
+    };
+
+    useEffect(() => {
+      loadTips();
+      const timer = window.setInterval(() => {
+        loadTips();
+      }, 10000);
+
+      return () => window.clearInterval(timer);
+    }, []);
+
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={loadTips}
+            className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-100 hover:bg-slate-600"
+          >
+            Muat Ulang
+          </button>
+          <div className="text-xs text-slate-400">
+            {lastRefresh ? `Terakhir diperbarui ${new Date(lastRefresh).toLocaleTimeString()}` : 'Belum diperbarui'}
+          </div>
+        </div>
+        {errorTips && (
+          <div className="rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+            {errorTips}
+          </div>
+        )}
+        {loadingTips ? (
+          <div className="text-slate-400">Memuat tips...</div>
+        ) : tips.length === 0 ? (
+          <div className="text-slate-400">Belum ada tip masuk.</div>
+        ) : (
+          <div className="space-y-2 max-h-72 overflow-auto">
+            {tips.map((t: any) => (
+              <div key={t.id} className="flex items-center justify-between rounded-lg border border-slate-700 p-3 bg-slate-700/30">
+                <div>
+                  <div className="font-medium text-slate-100">Rp {Number(t.amount).toLocaleString('id-ID')} — {t.donorName || 'Anonim'}</div>
+                  <div className="text-xs text-slate-400">{new Date(t.createdAt).toLocaleString()}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="text-sm text-slate-300">{t.paymentStatus}</div>
+                  <button onClick={() => deleteTip(t.id)} className="rounded px-2 py-1 bg-red-600 text-white text-xs">Hapus</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const statusBadge = (status: CampaignStatus) => {
     if (status === 'verified') {
       return <Badge className="bg-emerald-900/30 text-emerald-200 border-emerald-700">Terverifikasi</Badge>;
@@ -201,6 +488,32 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
               </Card>
             );
           })}
+        </section>
+
+        <section>
+          <Card className="bg-slate-800 border-slate-700 shadow-sm">
+            <CardHeader className="px-6 pt-6">
+              <CardTitle className="text-slate-100">Kelola Iklan Sponsor (Sponsorship Banner)</CardTitle>
+              <CardDescription className="text-slate-400">
+                Unggah banner sponsor untuk ditampilkan di halaman publik. Ini menyimpan data secara lokal; integrasikan ke backend nanti.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="px-6 pb-6">
+              <BannerManager />
+            </CardContent>
+          </Card>
+        </section>
+
+        <section>
+          <Card className="bg-slate-800 border-slate-700 shadow-sm">
+            <CardHeader className="px-6 pt-6">
+              <CardTitle className="text-slate-100">Daftar Tips Masuk</CardTitle>
+              <CardDescription className="text-slate-400">Lihat tips sukarela yang masuk ke platform (demo).</CardDescription>
+            </CardHeader>
+            <CardContent className="px-6 pb-6">
+              <TipsPanel />
+            </CardContent>
+          </Card>
         </section>
 
         <section className="grid xl:grid-cols-[1.3fr_1fr] gap-6">

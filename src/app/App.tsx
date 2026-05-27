@@ -96,6 +96,7 @@ type PendingPaymentRecord = {
   orderId: string;
   campaignTitle: string;
   amount: number;
+  tipAmount?: number;
   method: 'virtual_account' | 'ewallet';
   redirectUrl?: string;
   ownerEmail?: string;
@@ -1170,7 +1171,8 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
             year: 'numeric'
           }),
           status: 'Sukses' as const,
-          campaignId: campaign.id
+          campaignId: campaign.id,
+          timestamp: donation.timestamp
         }));
     }
 
@@ -1190,6 +1192,13 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
 
     return [];
+  });
+
+  // Ensure global sort: newest donations first
+  donationHistoryForDisplay.sort((a, b) => {
+    const ta = Number((a as any).timestamp || 0);
+    const tb = Number((b as any).timestamp || 0);
+    return tb - ta;
   });
 
   const baseAdminUsers: AdminUserRow[] = [
@@ -1538,6 +1547,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                       {
                         name: donorInfo.name,
                         amount: amount,
+                        tip: donorInfo.tip || 0,
                         message: donorInfo.message,
                         timestamp: Date.now()
                       }
@@ -1937,8 +1947,10 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                 <option>Paling Mendesak</option>
                 <option>Hampir Tercapai</option>
               </select>
-              
+
             </div>
+
+          {/* Tip widget moved to Navbar dropdown */}
           </div>
 
           <div ref={campaignListTopRef} className={`grid md:grid-cols-2 lg:grid-cols-3 gap-6 transition-opacity duration-300 ${campaignListFadeOut ? 'opacity-0' : 'opacity-100'}`}>

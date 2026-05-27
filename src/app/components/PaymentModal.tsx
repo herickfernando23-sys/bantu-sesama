@@ -145,6 +145,7 @@ type PendingPaymentRecord = {
   orderId: string;
   campaignTitle: string;
   amount: number;
+  tipAmount?: number;
   method: 'virtual_account' | 'ewallet';
   transactionToken?: string;
   redirectUrl?: string;
@@ -191,7 +192,7 @@ interface PaymentModalProps {
   campaignId: number;
   campaignTitle: string;
   user?: { id?: number; name: string; email?: string } | null;
-  onDonationSuccess?: (amount: number, donorInfo: {name: string; message: string}) => void;
+  onDonationSuccess?: (amount: number, donorInfo: {name: string; message: string; tip?: number}) => void;
   onNavigateToContinuePayment?: (payment: {
     donationId: number;
     orderId: string;
@@ -650,18 +651,18 @@ export function PaymentModal({
               console.info('Saving pending payment with redirectUrl:', { redirectUrlValue });
               const ownerEmail = String(user?.email || donorEmail || '').trim();
               
-              const pendingPaymentData = {
-                donationId: Number(donationIdForCallback || 0),
-                orderId: String(orderIdForCallback || ''),
-                campaignTitle,
-                amount: Number(amount),
-                method: paymentMethod,
-                redirectUrl: redirectUrlValue,
-                transactionToken: tokenToUse,
-                ownerEmail: ownerEmail || undefined,
-                createdAt: Date.now(),
-                updatedAt: Date.now()
-              };
+                const pendingPaymentData = {
+                  donationId: Number(donationIdForCallback || 0),
+                  orderId: String(orderIdForCallback || ''),
+                  campaignTitle,
+                  amount: Number(amount),
+                  method: paymentMethod,
+                  redirectUrl: redirectUrlValue,
+                  transactionToken: tokenToUse,
+                  ownerEmail: ownerEmail || undefined,
+                  createdAt: Date.now(),
+                  updatedAt: Date.now()
+                };
               
               console.info('Pending payment data:', pendingPaymentData);
               upsertPendingPayment(pendingPaymentData);
@@ -761,9 +762,7 @@ export function PaymentModal({
             <>
               <div className="mb-6 space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Nama Lengkap
-                  </label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Nama Lengkap</label>
                   <input
                     type="text"
                     value={donorName}
@@ -774,9 +773,7 @@ export function PaymentModal({
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Email
-                  </label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Email</label>
                   <input
                     type="email"
                     value={donorEmail}
@@ -799,9 +796,7 @@ export function PaymentModal({
                 </label>
 
                 <div>
-                  <label className="block text-sm font-medium text-slate-700 mb-2">
-                    Pesan dan Doa (Opsional)
-                  </label>
+                  <label className="block text-sm font-medium text-slate-700 mb-2">Pesan dan Doa (Opsional)</label>
                   <textarea
                     value={donorMessage}
                     onChange={(e) => setDonorMessage(e.target.value)}
@@ -813,9 +808,7 @@ export function PaymentModal({
               </div>
 
               {error && (
-                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
-                  {error}
-                </div>
+                <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
               )}
 
               <button
@@ -863,6 +856,8 @@ export function PaymentModal({
                   </button>
                 ))}
               </div>
+
+              {/* Tips moved to Navbar */}
 
               <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
                 <label className="flex items-start gap-3 cursor-pointer">
@@ -925,10 +920,9 @@ export function PaymentModal({
               <div className="mb-6 p-4 bg-slate-50 rounded-lg border border-slate-200">
                 <div className="flex justify-between items-center mb-2">
                   <span className="text-slate-600">Jumlah Donasi:</span>
-                  <span className="font-semibold text-slate-900">
-                    Rp {Number(amount || 0).toLocaleString('id-ID')}
-                  </span>
+                  <span className="font-semibold text-slate-900">Rp {Number(amount || 0).toLocaleString('id-ID')}</span>
                 </div>
+                {/* Tips moved to Navbar; show only donation amount here */}
                 {isRecurring && (
                   <div className="text-sm text-amber-700 flex items-center gap-1 mt-2">
                     <Calendar className="w-4 h-4" />

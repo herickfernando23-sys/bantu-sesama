@@ -1,6 +1,7 @@
 import { Logo } from './Logo';
 import { Menu, X, Heart, User, Bell, Clock3, ExternalLink } from 'lucide-react';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { TipWidget } from './TipWidget';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -39,9 +40,51 @@ interface NavbarProps {
 export function Navbar({ onNavigate, onHome, user, onLogout, pendingPayments = [], onOpenPendingPayment }: NavbarProps) {
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [banner, setBanner] = useState<{ imageUrl: string; link?: string; title?: string } | null>(null);
+  const apiBaseUrl = String((import.meta as any).env?.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
+  const resolveBannerImageSrc = (imageUrl: string) => {
+    if (!imageUrl) return '';
+    if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
+      return imageUrl;
+    }
+    return `${apiBaseUrl}${imageUrl.startsWith('/') ? '' : '/'}${imageUrl}`;
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const resp = await fetch('/api/sponsor-banners');
+        if (!resp.ok) return;
+        const list = await resp.json();
+        if (Array.isArray(list) && list.length > 0) {
+          setBanner({ imageUrl: resolveBannerImageSrc(list[0].imageUrl), link: list[0].link, title: list[0].title });
+        }
+      } catch (err) {
+        // ignore
+      }
+    })();
+  }, []);
 
   return (
-    <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
+    <>
+      {banner && (
+        <div className="w-full bg-slate-50 border-b border-slate-200 flex items-center justify-center py-2">
+          {banner.link ? (
+            <div className="w-full flex justify-center">
+              <a href={banner.link} target="_blank" rel="noreferrer" className="block">
+                <img src={banner.imageUrl} alt={banner.title || 'Sponsor'} className="w-[728px] max-w-full h-[90px] object-cover" />
+              </a>
+            </div>
+          ) : (
+            <div className="w-full flex justify-center">
+              <div>
+                <img src={banner.imageUrl} alt={banner.title || 'Sponsor'} className="w-[728px] max-w-full h-[90px] object-cover" />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      <nav className="bg-white border-b border-gray-200 sticky top-0 z-50">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-16">
           <Logo onClick={onHome} />
@@ -56,6 +99,14 @@ export function Navbar({ onNavigate, onHome, user, onLogout, pendingPayments = [
           </div>
 
           <div className="hidden md:flex items-center gap-3">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <button className="px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100">Beri Tips</button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-80 rounded-2xl border border-slate-200 bg-white p-3 shadow-xl">
+                <TipWidget user={user} />
+              </DropdownMenuContent>
+            </DropdownMenu>
             {user ? (
               <>
                 <DropdownMenu>
@@ -160,5 +211,6 @@ export function Navbar({ onNavigate, onHome, user, onLogout, pendingPayments = [
         )}
       </div>
     </nav>
+    </>
   );
 }
