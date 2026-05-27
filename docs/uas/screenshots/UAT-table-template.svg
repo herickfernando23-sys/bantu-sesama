@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1260" viewBox="0 0 1800 1260" role="img" aria-labelledby="title desc">
+  <title id="title">Tabel UAT BantuSesama</title>
+  <desc id="desc">Template tabel User Acceptance Test untuk laporan UAS.</desc>
+
+  <defs>
+    <style>
+      .bg { fill: #f8fafc; }
+      .card { fill: #ffffff; stroke: #cbd5e1; stroke-width: 2; }
+      .header { fill: #0f172a; }
+      .headcell { fill: #1e293b; }
+      .grid { stroke: #cbd5e1; stroke-width: 1; }
+      .txt-title { font: 700 40px 'Segoe UI', Arial, sans-serif; fill: #ffffff; }
+      .txt-sub { font: 500 20px 'Segoe UI', Arial, sans-serif; fill: #cbd5e1; }
+      .txt-head { font: 700 18px 'Segoe UI', Arial, sans-serif; fill: #f8fafc; }
+      .txt-cell { font: 15px 'Segoe UI', Arial, sans-serif; fill: #0f172a; }
+      .txt-small { font: 13px 'Segoe UI', Arial, sans-serif; fill: #475569; }
+      .pass { fill: #ecfdf3; }
+      .fail { fill: #fef2f2; }
+      .blocked { fill: #fffbeb; }
+      .badge-pass { fill: #16a34a; }
+      .badge-fail { fill: #dc2626; }
+      .badge-blocked { fill: #d97706; }
+      .txt-badge { font: 700 13px 'Segoe UI', Arial, sans-serif; fill: #ffffff; }
+    </style>
+  </defs>
+
+  <rect class="bg" x="0" y="0" width="1800" height="1260"/>
+  <rect class="card" x="40" y="40" width="1720" height="1180" rx="16"/>
+
+  <rect class="header" x="40" y="40" width="1720" height="140" rx="16"/>
+  <text class="txt-title" x="80" y="105">Dokumentasi UAT - BantuSesama</text>
+  <text class="txt-sub" x="80" y="145">User Acceptance Test (Template Hasil Pengujian)</text>
+
+  <!-- Table layout -->
+  <!-- x positions: 60, 150, 460, 820, 1210, 1300, 1740 -->
+  <rect class="headcell" x="60" y="210" width="1680" height="56" rx="8"/>
+  <line class="grid" x1="150" y1="210" x2="150" y2="1080"/>
+  <line class="grid" x1="460" y1="210" x2="460" y2="1080"/>
+  <line class="grid" x1="820" y1="210" x2="820" y2="1080"/>
+  <line class="grid" x1="1210" y1="210" x2="1210" y2="1080"/>
+  <line class="grid" x1="1300" y1="210" x2="1300" y2="1080"/>
+  <line class="grid" x1="1740" y1="210" x2="1740" y2="1080"/>
+
+  <line class="grid" x1="60" y1="266" x2="1740" y2="266"/>
+  <line class="grid" x1="60" y1="322" x2="1740" y2="322"/>
+  <line class="grid" x1="60" y1="378" x2="1740" y2="378"/>
+  <line class="grid" x1="60" y1="434" x2="1740" y2="434"/>
+  <line class="grid" x1="60" y1="490" x2="1740" y2="490"/>
+  <line class="grid" x1="60" y1="546" x2="1740" y2="546"/>
+  <line class="grid" x1="60" y1="602" x2="1740" y2="602"/>
+  <line class="grid" x1="60" y1="658" x2="1740" y2="658"/>
+  <line class="grid" x1="60" y1="714" x2="1740" y2="714"/>
+  <line class="grid" x1="60" y1="770" x2="1740" y2="770"/>
+  <line class="grid" x1="60" y1="826" x2="1740" y2="826"/>
+  <line class="grid" x1="60" y1="882" x2="1740" y2="882"/>
+  <line class="grid" x1="60" y1="938" x2="1740" y2="938"/>
+  <line class="grid" x1="60" y1="994" x2="1740" y2="994"/>
+  <line class="grid" x1="60" y1="1050" x2="1740" y2="1050"/>
+  <line class="grid" x1="60" y1="1080" x2="1740" y2="1080"/>
+
+  <text class="txt-head" x="90" y="245">ID</text>
+  <text class="txt-head" x="175" y="245">Skenario UAT</text>
+  <text class="txt-head" x="475" y="245">Langkah Uji Singkat</text>
+  <text class="txt-head" x="835" y="245">Hasil yang Diharapkan</text>
+  <text class="txt-head" x="1230" y="245">Status</text>
+  <text class="txt-head" x="1320" y="245">Bukti</text>
+
+  <!-- Row helper y centers: 301,357,413,469,525,581,637,693,749,805,861,917,973,1029 -->
+  <text class="txt-cell" x="84" y="301">UAT-01</text>
+  <text class="txt-cell" x="175" y="301">Lihat daftar kampanye</text>
+  <text class="txt-cell" x="475" y="301">Buka halaman beranda</text>
+  <text class="txt-cell" x="835" y="301">Daftar kampanye tampil</text>
+  <rect x="1220" y="283" width="64" height="24" rx="12" class="badge-pass"/><text class="txt-badge" x="1234" y="300">PASS</text>
+  <text class="txt-cell" x="1320" y="301">01-home-page.png</text>
+
+  <text class="txt-cell" x="84" y="357">UAT-02</text>
+  <text class="txt-cell" x="175" y="357">Lihat detail kampanye</text>
+  <text class="txt-cell" x="475" y="357">Pilih salah satu kampanye</text>
+  <text class="txt-cell" x="835" y="357">Detail kampanye tampil</text>
+  <rect x="1220" y="339" width="64" height="24" rx="12" class="badge-pass"/><text class="txt-badge" x="1234" y="356">PASS</text>
+  <text class="txt-cell" x="1320" y="357">02-campaign-detail.png</text>
+
+  <text class="txt-cell" x="84" y="413">UAT-03</text>
+  <text class="txt-cell" x="175" y="413">Lihat transparansi dana</text>
+  <text class="txt-cell" x="475" y="413">Buka tab transparansi</text>
+  <text class="txt-cell" x="835" y="413">Grafik alokasi dan pencairan</text>
+  <rect x="1220" y="395" width="64" height="24" rx="12" class="badge-pass"/><text class="txt-badge" x="1234" y="412">PASS</text>
+  <text class="txt-cell" x="1320" y="413">03-transparency-tab.png</text>
+
+  <text class="txt-cell" x="84" y="469">UAT-04</text>
+  <text class="txt-cell" x="175" y="469">Buat donasi baru</text>
+  <text class="txt-cell" x="475" y="469">Isi identitas dan nominal</text>
+  <text class="txt-cell" x="835" y="469">Masuk ke payment gateway</text>
+  <rect x="1220" y="451" width="64" height="24" rx="12" class="badge-pass"/><text class="txt-badge" x="1234" y="468">PASS</text>
+  <text class="txt-cell" x="1320" y="469">04-05-06 screenshots</text>
+
+  <text class="txt-cell" x="84" y="525">UAT-05</text>
+  <text class="txt-cell" x="175" y="525">Pembayaran sukses</text>
+  <text class="txt-cell" x="475" y="525">Selesaikan transaksi</text>
+  <text class="txt-cell" x="835" y="525">Status sukses dan dana bertambah</text>
+  <rect x="1220" y="507" width="64" height="24" rx="12" class="badge-pass"/><text class="txt-badge" x="1234" y="524">PASS</text>
+  <text class="txt-cell" x="1320" y="525">07-payment-success-or-pending.png</text>
+
+  <text class="txt-cell" x="84" y="581">UAT-06</text>
+  <text class="txt-cell" x="175" y="581">Pembayaran pending</text>
+  <text class="txt-cell" x="475" y="581">Cek status pembayaran</text>
+  <text class="txt-cell" x="835" y="581">Status pending dapat dilanjutkan</text>
+  <rect x="1220" y="563" width="88" height="24" rx="12" class="badge-blocked"/><text class="txt-badge" x="1230" y="580">BLOCKED</text>
+  <text class="txt-cell" x="1320" y="581">(Isi saat demo)</text>
+
+  <text class="txt-cell" x="84" y="637">UAT-07</text>
+  <text class="txt-cell" x="175" y="637">Riwayat donasi</text>
+  <text class="txt-cell" x="475" y="637">Buka halaman Donasi Saya</text>
+  <text class="txt-cell" x="835" y="637">Donasi terbaru muncul paling atas</text>
+  <rect x="1220" y="619" width="64" height="24" rx="12" class="badge-pass"/><text class="txt-badge" x="1234" y="636">PASS</text>
+  <text class="txt-cell" x="1320" y="637">08-donasi-saya-history.png</text>
+
+  <text class="txt-cell" x="84" y="693">UAT-08</text>
+  <text class="txt-cell" x="175" y="693">Setup donasi rutin</text>
+  <text class="txt-cell" x="475" y="693">Aktifkan recurring</text>
+  <text class="txt-cell" x="835" y="693">Recurring record berhasil dibuat</text>
+  <rect x="1220" y="675" width="64" height="24" rx="12" class="badge-pass"/><text class="txt-badge" x="1234" y="692">PASS</text>
+  <text class="txt-cell" x="1320" y="693">11-recurring-setup.png</text>
+
+  <text class="txt-cell" x="84" y="749">UAT-09</text>
+  <text class="txt-cell" x="175" y="749">List recurring donation</text>
+  <text class="txt-cell" x="475" y="749">Buka list recurring user</text>
+  <text class="txt-cell" x="835" y="749">Data recurring tampil</text>
+  <rect x="1220" y="731" width="64" height="24" rx="12" class="badge-pass"/><text class="txt-badge" x="1234" y="748">PASS</text>
+  <text class="txt-cell" x="1320" y="749">12-recurring-management.png</text>
+
+  <text class="txt-cell" x="84" y="805">UAT-10</text>
+  <text class="txt-cell" x="175" y="805">Cancel recurring donation</text>
+  <text class="txt-cell" x="475" y="805">Klik batalkan recurring</text>
+  <text class="txt-cell" x="835" y="805">Status recurring non-aktif</text>
+  <rect x="1220" y="787" width="64" height="24" rx="12" class="badge-pass"/><text class="txt-badge" x="1234" y="804">PASS</text>
+  <text class="txt-cell" x="1320" y="805">12-recurring-management.png</text>
+
+  <text class="txt-cell" x="84" y="861">UAT-11</text>
+  <text class="txt-cell" x="175" y="861">Chatbot FAQ</text>
+  <text class="txt-cell" x="475" y="861">Input: "cara donasi"</text>
+  <text class="txt-cell" x="835" y="861">Bot menjawab sesuai FAQ</text>
+  <rect x="1220" y="843" width="64" height="24" rx="12" class="badge-pass"/><text class="txt-badge" x="1234" y="860">PASS</text>
+  <text class="txt-cell" x="1320" y="861">10-chatbot-feature.png</text>
+
+  <text class="txt-cell" x="84" y="917">UAT-12</text>
+  <text class="txt-cell" x="175" y="917">Chatbot NLP</text>
+  <text class="txt-cell" x="475" y="917">Pertanyaan bebas user</text>
+  <text class="txt-cell" x="835" y="917">Jawaban AI/fallback KB</text>
+  <rect x="1220" y="899" width="88" height="24" rx="12" class="badge-blocked"/><text class="txt-badge" x="1230" y="916">BLOCKED</text>
+  <text class="txt-cell" x="1320" y="917">(Isi saat API key aktif)</text>
+
+  <text class="txt-cell" x="84" y="973">UAT-13</text>
+  <text class="txt-cell" x="175" y="973">Admin dashboard</text>
+  <text class="txt-cell" x="475" y="973">Login sebagai admin</text>
+  <text class="txt-cell" x="835" y="973">Monitoring dan verifikasi tampil</text>
+  <rect x="1220" y="955" width="64" height="24" rx="12" class="badge-pass"/><text class="txt-badge" x="1234" y="972">PASS</text>
+  <text class="txt-cell" x="1320" y="973">09-admin-dashboard.png</text>
+
+  <text class="txt-cell" x="84" y="1029">UAT-14</text>
+  <text class="txt-cell" x="175" y="1029">Keamanan endpoint auth</text>
+  <text class="txt-cell" x="475" y="1029">Akses tanpa token</text>
+  <text class="txt-cell" x="835" y="1029">Response 401/403</text>
+  <rect x="1220" y="1011" width="64" height="24" rx="12" class="badge-pass"/><text class="txt-badge" x="1234" y="1028">PASS</text>
+  <text class="txt-cell" x="1320" y="1029">API response / Postman</text>
+
+  <text class="txt-small" x="80" y="1135">Catatan: Status dapat diubah sesuai hasil uji aktual. Template ini disusun untuk kebutuhan laporan UAS.</text>
+  <text class="txt-small" x="80" y="1165">Tanggal Uji: ____________   Penguji: ____________   Versi Commit: ____________</text>
+</svg>

@@ -1486,10 +1486,14 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
   }, [user?.email]);
 
+  const regularSiteZoomStyle = {
+  };
+
   // Routing utama
   if (page === 'donasi-saya') {
     return (
-      <>
+      <div style={regularSiteZoomStyle}>
+        <>
         <Navbar
           onNavigate={navigatePage}
           onHome={goHome}
@@ -1504,12 +1508,14 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           donations={donationHistoryForDisplay}
         />
         <Chatbot />
-      </>
+        </>
+      </div>
     );
   }
   if (selectedCampaignData) {
     return (
-      <>
+      <div style={regularSiteZoomStyle}>
+        <>
         <Navbar
           onNavigate={navigatePage}
           onHome={goHome}
@@ -1559,12 +1565,14 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           onNavigateToContinuePayment={openPendingPayment}
         />
         <Chatbot />
-      </>
+        </>
+      </div>
     );
   }
   if (page === 'login') {
     return (
-      <>
+      <div style={regularSiteZoomStyle}>
+        <>
         <Navbar
           onNavigate={navigatePage}
           onHome={goHome}
@@ -1578,11 +1586,16 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           setRegisteredUsers(loadRegisteredUsersFromStorage());
           goHome();
         }} />
-      </>
+        </>
+      </div>
     );
   }
   if (page === 'lanjut-pembayaran') {
-    return <ContinuePaymentPage onHome={goHome} user={user} />;
+    return (
+      <div style={regularSiteZoomStyle}>
+        <ContinuePaymentPage onHome={goHome} user={user} />
+      </div>
+    );
   }
   if (page === 'admin-login' || (page === 'admin' && !adminUser)) {
     return (
@@ -1597,7 +1610,8 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   }
   if (page === 'buat-kampanye') {
     return (
-      <>
+      <div style={regularSiteZoomStyle}>
+        <>
         <Navbar
           onNavigate={navigatePage}
           onHome={goHome}
@@ -1634,17 +1648,23 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
             }}
           />
         </div>
-      </>
+        </>
+      </div>
     );
   }
   if (page && ['tentang-kami', 'syarat-ketentuan', 'kebijakan-privasi', 'faq', 'hubungi-kami', 'panduan-donatur', 'panduan-penggalang'].includes(page)) {
-    return <InfoPage page={page as InfoPageKey} onNavigate={navigatePage} onHome={goHome} />;
+    return (
+      <div style={regularSiteZoomStyle}>
+        <InfoPage page={page as InfoPageKey} onNavigate={navigatePage} onHome={goHome} />
+      </div>
+    );
   }
   if (page === 'panel') {
     const userCampaigns = user?.email ? campaigns.filter((campaign) => campaign.creatorEmail === user.email) : [];
 
     return (
-      <>
+      <div style={regularSiteZoomStyle}>
+        <>
         <Navbar
           onNavigate={navigatePage}
           onHome={goHome}
@@ -1712,7 +1732,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                               try {
                                 const raw = localStorage.getItem('bantusesama-recurring-donors') || '[]';
                                 const records: Array<any> = JSON.parse(raw || '[]');
-                                const filtered = records.filter((r) => r.email.toLowerCase() !== user.email.toLowerCase());
+                                const filtered = records.filter((r) => r.email.toLowerCase() !== user.email!.toLowerCase());
                                 localStorage.setItem('bantusesama-recurring-donors', JSON.stringify(filtered));
                                 // force re-render to refresh recurring status
                                 setRecurringToggle((v) => v + 1);
@@ -1771,7 +1791,8 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
             <p>Silakan login terlebih dahulu.</p>
           )}
         </div>
-      </>
+        </>
+      </div>
     );
   }
   if (page === 'admin') {
@@ -1848,7 +1869,8 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     );
   }
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div style={regularSiteZoomStyle}>
+      <div className="min-h-screen bg-gray-50">
       <Navbar
         onNavigate={navigatePage}
         onHome={goHome}
@@ -1870,7 +1892,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           <div className="grid md:grid-cols-2 gap-12 items-center mb-16">
             <div>
               <h1 className="font-bold text-4xl md:text-5xl mb-6">
-                Bantu UMKM Bangkit dari Bencana
+                Wujudkan bantuan cepat untuk mereka yang paling membutuhkan
               </h1>
               <p className="text-xl text-blue-50 mb-8">
                 Platform crowdfunding dengan transparansi penuh untuk membantu UMKM yang terdampak bencana
@@ -2108,6 +2130,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
       <Chatbot />
       {/* Dokumentasi component removed */}
+    </div>
     </div>
   );
 }
