@@ -2,7 +2,7 @@ import { Logo } from './Logo';
 import { Menu, X, Heart, User, Bell, Clock3, ExternalLink } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { TipWidget } from './TipWidget';
-import { getApiBaseUrl } from '../lib/apiBaseUrl';
+import { apiUrl, getApiBaseUrl } from '../lib/apiBaseUrl';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,7 +54,7 @@ export function Navbar({ onNavigate, onHome, user, onLogout, pendingPayments = [
   useEffect(() => {
     (async () => {
       try {
-        const resp = await fetch(`${apiBaseUrl}/api/sponsor-banners`);
+        const resp = await fetch(apiUrl('/api/sponsor-banners'));
         if (!resp.ok) return;
         const list = await resp.json();
         if (Array.isArray(list) && list.length > 0) {

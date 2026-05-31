@@ -3,7 +3,7 @@ import { MapPin, Users, Calendar, Share2, Heart, TrendingUp, Shield, FileText, F
 import { TransparencyChart } from './TransparencyChart';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { PaymentModal } from './PaymentModal';
-import { getApiBaseUrl } from '../lib/apiBaseUrl';
+import { apiUrl, getApiBaseUrl } from '../lib/apiBaseUrl';
 
 interface Campaign {
   id: number;
@@ -344,7 +344,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
         (async () => {
             const apiBaseUrl = getApiBaseUrl();
           try {
-            const res = await fetch(`${apiBaseUrl}/api/donations?campaignId=${campaign.id}`);
+            const res = await fetch(apiUrl(`/api/donations?campaignId=${campaign.id}`));
             if (!res.ok) {
               const text = await res.text().catch(() => '');
               console.error('Failed to fetch donations: non-OK response', res.status, text);

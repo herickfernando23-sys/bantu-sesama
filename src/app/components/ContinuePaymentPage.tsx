@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ExternalLink, Loader, RefreshCw, ShieldAlert, CheckCircle2, Clock3, XCircle, Copy } from 'lucide-react';
-import { getApiBaseUrl } from '../lib/apiBaseUrl';
+import { apiUrl, getApiBaseUrl } from '../lib/apiBaseUrl';
 
 const apiBaseUrl = getApiBaseUrl();
 const midtransClientKey = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_CLIENT_KEY) || '').trim();
@@ -108,7 +108,7 @@ export function ContinuePaymentPage({ onHome, user }: { onHome: () => void; user
     setError('');
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/payments/status/${encodeURIComponent(query.orderId)}`);
+      const response = await fetch(apiUrl(`/api/payments/status/${encodeURIComponent(query.orderId)}`));
       if (!response.ok) {
         const body = await response.json().catch(() => ({}));
         throw new Error(body.error || 'Gagal mengambil status pembayaran');
@@ -177,7 +177,7 @@ export function ContinuePaymentPage({ onHome, user }: { onHome: () => void; user
                 callbackFired = true;
                 clearTimeout(snapTimeout);
                 try {
-                  const response = await fetch(`${apiBaseUrl}/api/payments/confirm`, {
+                  const response = await fetch(apiUrl('/api/payments/confirm'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -269,7 +269,7 @@ export function ContinuePaymentPage({ onHome, user }: { onHome: () => void; user
     setError('');
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/payments/cancel`, {
+      const response = await fetch(apiUrl('/api/payments/cancel'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

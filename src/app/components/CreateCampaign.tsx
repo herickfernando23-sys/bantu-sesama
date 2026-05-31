@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Upload } from 'lucide-react';
 import { Toaster, toast } from 'sonner';
-import { getApiBaseUrl } from '../lib/apiBaseUrl';
+import { apiUrl, getApiBaseUrl } from '../lib/apiBaseUrl';
 
 const apiBaseUrl = getApiBaseUrl();
 
@@ -252,7 +252,7 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
       // Use default image if no image provided
       const campaignImage = imagePreview || DEFAULT_CAMPAIGN_IMAGE;
 
-      const response = await fetch(`${apiBaseUrl}/api/campaigns`, {
+      const response = await fetch(apiUrl('/api/campaigns'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

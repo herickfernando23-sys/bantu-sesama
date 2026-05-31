@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { MessageCircle, X, Send, Bot } from 'lucide-react';
-import { getApiBaseUrl } from '../lib/apiBaseUrl';
+import { apiUrl, getApiBaseUrl } from '../lib/apiBaseUrl';
 
 interface Message {
   id: number;
@@ -33,7 +33,7 @@ export function Chatbot() {
   const fetchBotResponse = async (userMessage: string): Promise<string> => {
     try {
       const response = await fetch(
-        `${apiBaseUrl}/api/chatbot/response?message=${encodeURIComponent(userMessage)}`,
+        apiUrl(`/api/chatbot/response?message=${encodeURIComponent(userMessage)}`),
         {
           method: 'GET',
           headers: {

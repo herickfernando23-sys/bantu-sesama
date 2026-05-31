@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, CreditCard, Check, Calendar, Loader, Clock3, RefreshCw, ExternalLink } from 'lucide-react';
 
-import { getApiBaseUrl } from '../lib/apiBaseUrl';
+import { apiUrl, getApiBaseUrl } from '../lib/apiBaseUrl';
 
 const apiBaseUrl = getApiBaseUrl();
 const midtransClientKey = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_CLIENT_KEY) || '').trim();
@@ -444,7 +444,7 @@ export function PaymentModal({
     setError('');
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/payments/confirm`, {
+      const response = await fetch(apiUrl('/api/payments/confirm'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -497,7 +497,7 @@ export function PaymentModal({
     setError('');
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/payments/cancel`, {
+      const response = await fetch(apiUrl('/api/payments/cancel'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -537,7 +537,7 @@ export function PaymentModal({
       let tokenToUse = '';
 
       try {
-        const createResp = await fetch(`${apiBaseUrl}/api/payments/create-intent`, {
+        const createResp = await fetch(apiUrl('/api/payments/create-intent'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -612,7 +612,7 @@ export function PaymentModal({
               clearTimeout(snapTimeoutHandle);
               console.info('Midtrans onSuccess', { result, donationId: donationIdForCallback, orderId: orderIdForCallback });
               try {
-                const response = await fetch(`${apiBaseUrl}/api/payments/confirm`, {
+                const response = await fetch(apiUrl('/api/payments/confirm'), {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
@@ -720,7 +720,7 @@ export function PaymentModal({
       const orderIdToUse = createdData?.orderId ? (createdData.orderId || '') : orderId;
       const transactionIdToUse = createdData?.transactionId ? (createdData.transactionId || '') : transactionId;
 
-      const response = await fetch(`${apiBaseUrl}/api/payments/confirm`, {
+      const response = await fetch(apiUrl('/api/payments/confirm'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
