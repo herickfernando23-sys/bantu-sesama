@@ -13,10 +13,14 @@ export function getApiBaseUrl() {
 
 export function apiUrl(path: string) {
   const baseUrl = getApiBaseUrl();
+  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+
   if (!baseUrl) {
-    throw new Error('VITE_API_URL belum diset. Set URL backend publik di Vercel.');
+    // Fall back to same-origin (useful when frontend and backend share origin or when VITE_API_URL
+    // is intentionally left unset during local dev). Do NOT throw to avoid crashing the UI.
+    console.warn('VITE_API_URL belum diset — menggunakan same-origin untuk `apiUrl` (prefix=', normalizedPath, ')');
+    return normalizedPath;
   }
 
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${baseUrl}${normalizedPath}`;
 }
