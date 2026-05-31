@@ -73,6 +73,23 @@ app.get('/', (req, res) => {
   });
 });
 
+app.get('/api', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Bantu Sesama API aktif',
+    routes: [
+      '/api/auth',
+      '/api/campaigns',
+      '/api/payments',
+      '/api/chatbot',
+      '/api/donations',
+      '/api/recurring',
+      '/api/tips',
+      '/api/sponsor-banners'
+    ]
+  });
+});
+
 // Simple image proxy to avoid client-side CORS/CSP issues during development.
 app.get('/image-proxy', (req, res) => {
   const url = String(req.query.url || '').trim();
