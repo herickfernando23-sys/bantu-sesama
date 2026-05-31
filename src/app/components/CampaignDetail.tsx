@@ -3,6 +3,7 @@ import { MapPin, Users, Calendar, Share2, Heart, TrendingUp, Shield, FileText, F
 import { TransparencyChart } from './TransparencyChart';
 import { useEffect, useMemo, useState, useRef } from 'react';
 import { PaymentModal } from './PaymentModal';
+import { getApiBaseUrl } from '../lib/apiBaseUrl';
 
 interface Campaign {
   id: number;
@@ -341,7 +342,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
       if (campaign.donors > 0) {
         setLoadingDonations(true);
         (async () => {
-            const apiBaseUrl = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:8080').replace(/\/$/, '');
+            const apiBaseUrl = getApiBaseUrl();
           try {
             const res = await fetch(`${apiBaseUrl}/api/donations?campaignId=${campaign.id}`);
             if (!res.ok) {

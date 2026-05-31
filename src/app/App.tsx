@@ -10,6 +10,7 @@ import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ContinuePaymentPage } from './components/ContinuePaymentPage';
 import { Chatbot } from './components/Chatbot';
+import { getApiBaseUrl } from './lib/apiBaseUrl';
 import { TrendingUp, Shield, Users, Heart } from 'lucide-react';
 
 type Page =
@@ -852,7 +853,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   // Append additional mock campaigns for testing pagination (only if not already present)
   useEffect(() => {
     if (!campaignsHydrated) return; // wait until stored campaigns are loaded
-    const apiBase = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
+    const apiBase = getApiBaseUrl();
     const extraMockCampaigns: CampaignRecord[] = [
       {
         id: 7,
@@ -987,7 +988,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   useEffect(() => {
     const storedCampaigns = loadCampaignsFromStorage();
     if (storedCampaigns && storedCampaigns.length > 0) {
-      const apiBase = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
+      const apiBase = getApiBaseUrl();
       const originalImagesFor1to6: Record<number, string> = {
         1: 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
         2: 'https://images.unsplash.com/photo-1774370793502-85098cd3fd00?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwyfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',

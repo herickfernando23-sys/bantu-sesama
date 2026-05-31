@@ -2,6 +2,7 @@ import { Logo } from './Logo';
 import { Menu, X, Heart, User, Bell, Clock3, ExternalLink } from 'lucide-react';
 import { useState, useEffect } from 'react';
 import { TipWidget } from './TipWidget';
+import { getApiBaseUrl } from '../lib/apiBaseUrl';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +42,7 @@ export function Navbar({ onNavigate, onHome, user, onLogout, pendingPayments = [
 
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [banner, setBanner] = useState<{ imageUrl: string; link?: string; title?: string } | null>(null);
-  const apiBaseUrl = String((import.meta as any).env?.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
+  const apiBaseUrl = getApiBaseUrl();
   const resolveBannerImageSrc = (imageUrl: string) => {
     if (!imageUrl) return '';
     if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('data:') || imageUrl.startsWith('blob:')) {
@@ -53,7 +54,7 @@ export function Navbar({ onNavigate, onHome, user, onLogout, pendingPayments = [
   useEffect(() => {
     (async () => {
       try {
-        const resp = await fetch('/api/sponsor-banners');
+        const resp = await fetch(`${apiBaseUrl}/api/sponsor-banners`);
         if (!resp.ok) return;
         const list = await resp.json();
         if (Array.isArray(list) && list.length > 0) {

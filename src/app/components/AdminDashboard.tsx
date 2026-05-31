@@ -1,6 +1,7 @@
 import { Badge } from './ui/badge';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
 import { useEffect, useRef, useState } from 'react';
+import { getApiBaseUrl } from '../lib/apiBaseUrl';
 import {
   BarChart3,
   CheckCircle2,
@@ -144,7 +145,7 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
   // Sponsorship banners (frontend-only management stored in localStorage)
   const bannersKey = 'bantusesama-sponsor-banners';
   type SponsorBanner = { id: number; title: string; link?: string; imageBase64: string; createdAt: number };
-  const apiBaseUrl = String((import.meta as any).env?.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
+  const apiBaseUrl = getApiBaseUrl();
   const resolveBannerImageSrc = (imageUrl: string) => {
     if (!imageUrl) return '';
     if (imageUrl.startsWith('http://') || imageUrl.startsWith('https://') || imageUrl.startsWith('data:')) return imageUrl;
@@ -171,9 +172,6 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
       try {
         const requestList = () => fetch(`${apiBaseUrl}/api/sponsor-banners`);
         let resp = await requestList().catch(() => null);
-        if (!resp) {
-          resp = await fetch('/api/sponsor-banners').catch(() => null);
-        }
         if (!resp || !resp.ok) return;
 
         const list = await resp.json();
@@ -204,13 +202,9 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
       form.append('title', title || 'Sponsor');
       if (link) form.append('link', link);
 
-      const apiBaseUrl = String((import.meta as any).env?.VITE_API_URL || 'http://localhost:4000').replace(/\/$/, '');
       const requestBannerUpload = () => fetch(`${apiBaseUrl}/api/sponsor-banners`, { method: 'POST', body: form });
 
       let resp = await requestBannerUpload().catch(() => null);
-      if (!resp) {
-        resp = await fetch('/api/sponsor-banners', { method: 'POST', body: form });
-      }
 
       if (!resp.ok) {
         const body = await resp.json().catch(() => ({}));
@@ -243,9 +237,6 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
       if (!Number.isSafeInteger(numericId) || numericId <= 0) return;
 
       let resp = await fetch(`${apiBaseUrl}/api/sponsor-banners/${numericId}`, { method: 'DELETE' }).catch(() => null);
-      if (!resp) {
-        resp = await fetch(`/api/sponsor-banners/${numericId}`, { method: 'DELETE' }).catch(() => null);
-      }
 
       if (resp && !resp.ok && resp.status !== 404) {
         const body = await resp.json().catch(() => ({}));
@@ -349,7 +340,7 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
       setLoadingTips(true);
       setErrorTips('');
       try {
-        const resp = await fetch('/api/tips');
+        const resp = await fetch(`${apiBaseUrl}/api/tips`);
         if (!resp.ok) throw new Error('Gagal memuat tips');
         const list = await resp.json();
         setTips(list);
@@ -365,7 +356,7 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
     const deleteTip = async (tipId: number) => {
       if (!window.confirm('Hapus tip ini dari daftar?')) return;
       try {
-        const resp = await fetch(`/api/tips/${tipId}`, { method: 'DELETE' });
+        const resp = await fetch(`${apiBaseUrl}/api/tips/${tipId}`, { method: 'DELETE' });
         if (!resp.ok) {
           const body = await resp.json().catch(() => ({}));
           throw new Error(body.error || 'Gagal menghapus tip');

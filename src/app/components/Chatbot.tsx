@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { MessageCircle, X, Send, Bot } from 'lucide-react';
+import { getApiBaseUrl } from '../lib/apiBaseUrl';
 
 interface Message {
   id: number;
@@ -14,21 +15,7 @@ interface ChatbotResponsePayload {
   suggestions?: string[];
 }
 
-function resolveApiBaseUrl() {
-  const envBaseUrl = String((import.meta as any).env?.VITE_API_URL || '').trim();
-
-  if (envBaseUrl) {
-    return envBaseUrl.replace(/\/$/, '');
-  }
-
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin.replace(/\/$/, '');
-  }
-
-  return 'http://localhost:8080';
-}
-
-const apiBaseUrl = resolveApiBaseUrl();
+const apiBaseUrl = getApiBaseUrl();
 
 export function Chatbot() {
   const [isOpen, setIsOpen] = useState(false);

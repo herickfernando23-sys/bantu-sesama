@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
+import { getApiBaseUrl } from '../lib/apiBaseUrl';
 
+const apiBaseUrl = getApiBaseUrl();
 const midtransClientKey = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_CLIENT_KEY) || '').trim();
 const viteMidtransIsProduction = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_IS_PRODUCTION) || '').toLowerCase() === 'true';
 
@@ -68,7 +70,7 @@ export function TipWidget({ user }: { user?: { name?: string; email?: string } |
 
     setLoading(true);
     try {
-      const resp = await fetch('/api/payments/create-tip-intent', {
+      const resp = await fetch(`${apiBaseUrl}/api/payments/create-tip-intent`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: numeric, donorName, donorEmail, isAnonymous, message: 'Tips Sukarela', paymentMethod: 'ewallet' })
@@ -85,7 +87,7 @@ export function TipWidget({ user }: { user?: { name?: string; email?: string } |
       // If Midtrans client key is not configured or Snap unavailable, fallback: mark tip succeeded on server
       if (!midtransClientKey) {
         try {
-          await fetch('/api/payments/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipId: data.tipId, orderId: data.orderId, transactionStatus: 'settlement' }) });
+          await fetch(`${apiBaseUrl}/api/payments/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipId: data.tipId, orderId: data.orderId, transactionStatus: 'settlement' }) });
           setSuccess(`Terima kasih! Tips Rp ${numeric.toLocaleString('id-ID')} berhasil tercatat.`);
         } catch (err) {
           setError('Gagal mencatat tip di server');
@@ -100,7 +102,7 @@ export function TipWidget({ user }: { user?: { name?: string; email?: string } |
         onSuccess: async (result: Record<string, any>) => {
           paymentCompletionRef.current = true;
           try {
-            await fetch('/api/payments/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipId: data.tipId, orderId: data.orderId, transactionStatus: String(result.transaction_status || '') }) });
+            await fetch(`${apiBaseUrl}/api/payments/confirm`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipId: data.tipId, orderId: data.orderId, transactionStatus: String(result.transaction_status || '') }) });
             setSuccess(`Terima kasih! Tips Rp ${numeric.toLocaleString('id-ID')} berhasil.`);
           } catch (err) {
             setError('Konfirmasi pembayaran gagal');
