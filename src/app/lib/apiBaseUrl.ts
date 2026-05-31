@@ -6,8 +6,6 @@ export function getApiBaseUrl() {
     if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
       return 'http://localhost:4000';
     }
-
-    return window.location.origin.replace(/\/$/, '');
   }
 
   return '';
@@ -15,7 +13,9 @@ export function getApiBaseUrl() {
 
 export function apiUrl(path: string) {
   const baseUrl = getApiBaseUrl();
-  if (!baseUrl) return path.startsWith('/') ? path : `/${path}`;
+  if (!baseUrl) {
+    throw new Error('VITE_API_URL belum diset. Set URL backend publik di Vercel.');
+  }
 
   const normalizedPath = path.startsWith('/') ? path : `/${path}`;
   return `${baseUrl}${normalizedPath}`;
