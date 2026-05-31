@@ -64,6 +64,15 @@ if (!isProduction) {
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
 
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'bantu-sesama-api',
+    health: '/health',
+    apiBase: '/api'
+  });
+});
+
 // Simple image proxy to avoid client-side CORS/CSP issues during development.
 app.get('/image-proxy', (req, res) => {
   const url = String(req.query.url || '').trim();
