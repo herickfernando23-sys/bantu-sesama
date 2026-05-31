@@ -19,7 +19,7 @@ const recurringService = require('./services/recurringPaymentService');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
-const corsOrigin = process.env.CORS_ORIGIN;
+const corsOrigin = String(process.env.CORS_ORIGIN || '').trim().replace(/\/+$/, '');
 
 app.set('trust proxy', process.env.TRUST_PROXY === '1' ? 1 : 0);
 

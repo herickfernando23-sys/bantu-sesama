@@ -1,5 +1,8 @@
 export function getApiBaseUrl() {
-  const envBaseUrl = String((import.meta as any).env?.VITE_API_URL || '').trim().replace(/\/$/, '');
+  let envBaseUrl = String((import.meta as any).env?.VITE_API_URL || '').trim().replace(/\/+$/, '');
+  if (envBaseUrl.endsWith('/api')) {
+    envBaseUrl = envBaseUrl.slice(0, -4);
+  }
   if (envBaseUrl) return envBaseUrl;
 
   if (typeof window !== 'undefined' && window.location?.hostname) {
