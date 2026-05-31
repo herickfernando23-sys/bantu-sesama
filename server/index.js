@@ -1,5 +1,6 @@
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+require('dotenv').config({ path: path.resolve(__dirname, '../.env'), override: false });
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -134,6 +135,7 @@ app.use('/api/sponsor-banners', sponsorBannersRoutes);
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 const PORT = process.env.PORT || 4000;
+const shouldSyncSchema = String(process.env.DB_SYNC || '').toLowerCase() === 'true' || (!isProduction && String(process.env.DB_SYNC || '').toLowerCase() !== 'false');
 
 // Global cron job reference for recurring donations
 let recurringCronJob = null;
@@ -175,10 +177,14 @@ function setupRecurringCronJob() {
 
 async function start() {
   try {
-    try {
-      await sequelize.sync({ alter: true });
-    } catch (err) {
-      console.error('Failed to sync DB (continuing without sync):', err && err.message ? err.message : err);
+    if (shouldSyncSchema) {
+      try {
+        await sequelize.sync({ alter: true });
+      } catch (err) {
+        console.error('Failed to sync DB (continuing without sync):', err && err.message ? err.message : err);
+      }
+    } else {
+      await sequelize.authenticate();
     }
 
     // Setup recurring donations scheduler

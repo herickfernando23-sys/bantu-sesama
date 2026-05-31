@@ -3,9 +3,27 @@ const path = require('path');
 require('dotenv').config();
 
 const databaseUrl = process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/microcrowd';
+const databaseSslEnabled = String(process.env.DATABASE_SSL || '').toLowerCase() === 'true';
+
+let databaseHost = '';
+try {
+  databaseHost = new URL(databaseUrl).hostname;
+} catch (err) {
+  databaseHost = '';
+}
+
+const shouldUseSsl = databaseSslEnabled || databaseHost.endsWith('.supabase.co') || databaseHost.includes('supabase');
 
 const sequelize = new Sequelize(databaseUrl, {
-  logging: false
+  logging: false,
+  dialectOptions: shouldUseSsl
+    ? {
+        ssl: {
+          require: true,
+          rejectUnauthorized: false
+        }
+      }
+    : undefined
 });
 
 const User = require('./user')(sequelize);
