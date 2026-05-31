@@ -1,6 +1,15 @@
 const { Sequelize } = require('sequelize');
 const path = require('path');
+const dns = require('dns');
 require('dotenv').config();
+
+try {
+  if (typeof dns.setDefaultResultOrder === 'function') {
+    dns.setDefaultResultOrder('ipv4first');
+  }
+} catch (err) {
+  // Ignore if the runtime does not support this API.
+}
 
 const databaseUrl = process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/microcrowd';
 const databaseSslEnabled = String(process.env.DATABASE_SSL || '').toLowerCase() === 'true';
@@ -18,6 +27,7 @@ const sequelize = new Sequelize(databaseUrl, {
   logging: false,
   dialectOptions: shouldUseSsl
     ? {
+        family: 4,
         ssl: {
           require: true,
           rejectUnauthorized: false
