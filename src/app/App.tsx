@@ -13,6 +13,8 @@ import { Chatbot } from './components/Chatbot';
 import { apiUrl, getApiBaseUrl } from './lib/apiBaseUrl';
 import { TrendingUp, Shield, Users, Heart } from 'lucide-react';
 
+const DEFAULT_CAMPAIGN_IMAGE = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 640 360%22%3E%3Crect width=%22640%22 height=%22360%22 fill=%22%23e5e7eb%22/%3E%3Ctext x=%22320%22 y=%22180%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%229ca3af%22 font-family=%22Arial%22 font-size=%2232%22%3ENo%20Image%3C/text%3E%3C/svg%3E';
+
 type Page =
   | 'kampanye'
   | 'donasi-saya'
@@ -374,7 +376,7 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   description: stripMarkdownHeading(campaign.description),
   fullDescription: toSafeText(campaign.fullDescription || campaign.story || campaign.description),
   story: toSafeText(campaign.story || campaign.fullDescription || campaign.description),
-  image: campaign.image || '',
+  image: campaign.image || DEFAULT_CAMPAIGN_IMAGE,
   location: toSafeText(campaign.location),
   category: toSafeText(campaign.category),
   organizer: toSafeText(campaign.organizer),
@@ -1843,7 +1845,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           }}
           onUpdateCampaign={(campaignId, updates) => {
             setCampaigns((prev) => prev.map((campaign) => (
-              campaign.id === campaignId ? { ...campaign, ...updates } : campaign
+              campaign.id === campaignId ? ({ ...campaign, ...updates } as CampaignRecord) : campaign
             )));
           }}
           onDonationSuccess={(amount, donorInfo) => {

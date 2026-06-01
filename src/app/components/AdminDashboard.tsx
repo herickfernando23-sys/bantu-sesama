@@ -653,12 +653,14 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
                         </div>
                         <div className="flex gap-2">
                           <button
+                            type="button"
                             onClick={() => onVerifyCampaign(campaign.id)}
                             className="rounded-xl bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700"
                           >
                             Verifikasi
                           </button>
                           <button
+                            type="button"
                             onClick={() => onRejectCampaign(campaign.id)}
                             className="rounded-xl bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
                           >
