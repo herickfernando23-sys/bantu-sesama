@@ -114,6 +114,8 @@ type RecurringDonationRecord = {
 };
 
 const campaignStorageKey = 'bantusesama-campaigns';
+const campaignCleanupVersionKey = 'bantusesama-campaign-cleanup-version';
+const campaignCleanupVersion = '2026-06-01-v2';
 const registeredUsersKey = 'bantusesama-registered-users';
 const adminSessionKey = 'bantusesama-admin-session';
 const withdrawalRequestsKey = 'bantusesama-withdrawal-requests';
@@ -126,6 +128,7 @@ const toSafeNumber = (value: unknown, fallback = 0) => {
   return Number.isFinite(numeric) ? numeric : fallback;
 };
 const stripMarkdownHeading = (value: unknown) => toSafeText(value).replace(/^\s*#{1,6}\s*/gm, '').replace(/\s+/g, ' ').trim();
+const normalizeKeyText = (value: unknown) => stripMarkdownHeading(value).toLowerCase();
 const legacyCampaignIdMap: Record<number, number> = {
   1001: 7,
   1002: 8,
@@ -256,13 +259,11 @@ const getRecurringDonationForEmail = (email?: string | null) => {
 };
 
 const buildCampaignFingerprint = (campaign: CampaignRecord) => [
-  toSafeText(campaign.title).toLowerCase(),
-  toSafeText(campaign.description).toLowerCase(),
-  toSafeText(campaign.location).toLowerCase(),
-  String(campaign.target),
-  toSafeText(campaign.creatorEmail).toLowerCase(),
-  toSafeText(campaign.organizer).toLowerCase(),
-  toSafeText(campaign.category).toLowerCase(),
+  normalizeKeyText(campaign.title),
+  normalizeKeyText(campaign.location),
+  normalizeKeyText(campaign.creatorEmail),
+  normalizeKeyText(campaign.organizer),
+  normalizeKeyText(campaign.category),
 ].join('|');
 
 const migrateLegacyCampaignId = (campaign: CampaignRecord): CampaignRecord => {
@@ -271,19 +272,29 @@ const migrateLegacyCampaignId = (campaign: CampaignRecord): CampaignRecord => {
 };
 
 const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
-  const seenIds = new Set<number>();
-  const seenFingerprints = new Set<string>();
+  const byFingerprint = new Map<string, CampaignRecord>();
 
-  return campaigns.filter((campaign) => {
+  campaigns.forEach((campaign) => {
     const fingerprint = buildCampaignFingerprint(campaign);
-    if (seenIds.has(campaign.id) || seenFingerprints.has(fingerprint)) {
-      return false;
+    const existing = byFingerprint.get(fingerprint);
+    if (!existing) {
+      byFingerprint.set(fingerprint, campaign);
+      return;
     }
 
-    seenIds.add(campaign.id);
-    seenFingerprints.add(fingerprint);
-    return true;
+    const existingTarget = toSafeNumber(existing.target, 0);
+    const nextTarget = toSafeNumber(campaign.target, 0);
+    const existingCollected = toSafeNumber(existing.collected, 0);
+    const nextCollected = toSafeNumber(campaign.collected, 0);
+    const existingScore = existingTarget + existingCollected + (existing.createdAt ?? 0);
+    const nextScore = nextTarget + nextCollected + (campaign.createdAt ?? 0);
+
+    if (nextScore > existingScore) {
+      byFingerprint.set(fingerprint, campaign);
+    }
   });
+
+  return Array.from(byFingerprint.values());
 };
 
 const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
@@ -971,41 +982,6 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
         }
 
         const remoteCampaigns = list.map(normalizeCampaignRecord);
-        const remoteFingerprints = new Set(remoteCampaigns.map(buildCampaignFingerprint));
-        const localOnlyCampaigns = localCampaigns.filter((campaign) => !remoteFingerprints.has(buildCampaignFingerprint(campaign)));
-
-        for (const campaign of localOnlyCampaigns) {
-          if (cancelled) {
-            break;
-          }
-
-          try {
-            const uploadResponse = await fetch(apiUrl('/api/campaigns'), {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                title: campaign.title,
-                description: campaign.description,
-                goal: campaign.target,
-                creatorEmail: campaign.creatorEmail,
-                organizer: campaign.organizer,
-                location: campaign.location,
-                category: campaign.category,
-                image: campaign.image,
-                status: campaign.status || 'pending',
-                daysLeft: campaign.daysLeft || 30,
-                fullDescription: campaign.fullDescription || campaign.story || campaign.description
-              })
-            });
-
-            if (uploadResponse.ok) {
-              const createdCampaign = normalizeCampaignRecord(await uploadResponse.json());
-              remoteCampaigns.push(createdCampaign);
-            }
-          } catch (err) {
-            // Ignore upload failures and keep local data usable.
-          }
-        }
 
         if (cancelled) {
           return;
@@ -1112,6 +1088,12 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
 
     if (!campaignsHydrated) {
+      return;
+    }
+
+    if (window.localStorage.getItem(campaignCleanupVersionKey) !== campaignCleanupVersion) {
+      window.localStorage.removeItem(campaignStorageKey);
+      window.localStorage.setItem(campaignCleanupVersionKey, campaignCleanupVersion);
       return;
     }
 

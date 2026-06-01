@@ -48,6 +48,7 @@ interface LoginRegisterProps {
 }
 
 export function LoginRegister({ onLogin }: LoginRegisterProps) {
+  const isLocalDev = import.meta.env.DEV && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
   const [isLogin, setIsLogin] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -107,6 +108,10 @@ export function LoginRegister({ onLogin }: LoginRegisterProps) {
   };
 
   useEffect(() => {
+    if (!isLocalDev) {
+      return;
+    }
+
     const users = seedDemoUser();
     users.forEach((user) => {
       void migrateUserToServer(user);
@@ -129,7 +134,7 @@ export function LoginRegister({ onLogin }: LoginRegisterProps) {
     try {
       if (isLogin) {
         const email = formData.email.trim();
-        const users = seedDemoUser();
+        const users = isLocalDev ? seedDemoUser() : [];
         const matchedUser = users.find((user) => user.email.toLowerCase() === email.toLowerCase());
 
         // Login validation
@@ -145,34 +150,25 @@ export function LoginRegister({ onLogin }: LoginRegisterProps) {
           return;
         }
 
-        if (!matchedUser || matchedUser.password !== formData.password) {
-          try {
-            const serverLogin = await loginWithServer(email, formData.password);
-            window.localStorage.setItem('token', serverLogin.token);
-            window.localStorage.setItem('bantusesama-user-session', JSON.stringify(serverLogin.user));
-            onLogin({
-              name: serverLogin.user.name,
-              email: serverLogin.user.email
-            });
-            return;
-          } catch (serverErr) {
-            setError('Akun belum terdaftar atau password salah');
-            setLoading(false);
-            return;
-          }
-        }
-
         try {
           const serverLogin = await loginWithServer(email, formData.password);
           window.localStorage.setItem('token', serverLogin.token);
           window.localStorage.setItem('bantusesama-user-session', JSON.stringify(serverLogin.user));
-          syncLocalUser({ name: serverLogin.user.name, email: serverLogin.user.email, password: formData.password });
+          if (isLocalDev) {
+            syncLocalUser({ name: serverLogin.user.name, email: serverLogin.user.email, password: formData.password });
+          }
           onLogin({
             name: serverLogin.user.name,
             email: serverLogin.user.email
           });
         } catch {
-          // Fallback untuk akun demo/lokal jika server sementara tidak tersedia.
+          if (!isLocalDev || !matchedUser || matchedUser.password !== formData.password) {
+            setError('Akun belum terdaftar di server atau password salah');
+            setLoading(false);
+            return;
+          }
+
+          // Fallback akun demo/lokal hanya untuk localhost development.
           syncLocalUser(matchedUser);
           void migrateUserToServer(matchedUser);
           onLogin({
@@ -208,29 +204,30 @@ export function LoginRegister({ onLogin }: LoginRegisterProps) {
           return;
         }
 
-        const users = seedDemoUser();
-        const emailExists = users.some((user) => user.email.toLowerCase() === email.toLowerCase());
-
-        if (emailExists) {
-          setError('Email sudah terdaftar');
-          setLoading(false);
-          return;
-        }
+        const users = isLocalDev ? seedDemoUser() : [];
 
         try {
           const serverAccount = await registerWithServer(formData.name.trim(), email, formData.password);
           window.localStorage.setItem('token', serverAccount.token);
           window.localStorage.setItem('bantusesama-user-session', JSON.stringify(serverAccount.user));
-          syncLocalUser({
-            name: serverAccount.user.name,
-            email: serverAccount.user.email,
-            password: formData.password
-          });
+          if (isLocalDev) {
+            syncLocalUser({
+              name: serverAccount.user.name,
+              email: serverAccount.user.email,
+              password: formData.password
+            });
+          }
           onLogin({
             name: serverAccount.user.name,
             email: serverAccount.user.email
           });
         } catch (serverErr) {
+          if (!isLocalDev) {
+            setError(serverErr instanceof Error ? serverErr.message : 'Registrasi gagal di server');
+            setLoading(false);
+            return;
+          }
+
           // Fallback lokal agar mode demo masih jalan ketika backend tidak tersedia.
           saveStoredUsers([
             ...users,
@@ -248,7 +245,7 @@ export function LoginRegister({ onLogin }: LoginRegisterProps) {
         }
       }
     } catch (err) {
-      setError(isLogin ? 'Login gagal' : 'Registrasi gagal');
+      setError(err instanceof Error ? err.message : (isLogin ? 'Login gagal' : 'Registrasi gagal'));
       console.error(err);
     } finally {
       setLoading(false);
