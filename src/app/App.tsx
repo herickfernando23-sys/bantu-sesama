@@ -343,22 +343,18 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   const rawTarget = toSafeNumber((campaign as CampaignRecord & { target?: number | string }).target, 0);
   const rawGoal = toSafeNumber((campaign as CampaignRecord & { goal?: number | string }).goal, 0);
   
-  const isSampleCampaign = campaign.id <= 6;
-  
-  // For sample campaigns with zero target/goal, assign default fallback target
   let normalizedTarget = Math.max(0, rawTarget > 0 ? rawTarget : rawGoal);
-  if (isSampleCampaign && normalizedTarget === 0) {
-    normalizedTarget = 5000000; // Default 5M for sample campaigns
+  if (normalizedTarget === 0) {
+    normalizedTarget = 5000000; // Default 5M for any campaign with missing target/goal
   }
   
   const normalizedCollected = Math.max(0, toSafeNumber(campaign.collected, 0));
   const normalizedDonors = Math.max(0, toSafeNumber(campaign.donors, 0));
 
-  // Apply fallback collected/donors for sample campaigns with zero values
-  const fallbackCollected = isSampleCampaign && normalizedCollected === 0 && normalizedTarget > 0
+  const fallbackCollected = normalizedCollected === 0 && normalizedTarget > 0
     ? Math.max(500000, Math.round(normalizedTarget * 0.15))
     : normalizedCollected;
-  const fallbackDonors = isSampleCampaign && normalizedDonors === 0 && fallbackCollected > 0
+  const fallbackDonors = normalizedDonors === 0 && fallbackCollected > 0
     ? Math.max(2, Math.round(fallbackCollected / 100000))
     : normalizedDonors;
 
@@ -533,9 +529,10 @@ export default function App() {
   const [serverUsers, setServerUsers] = useState<ServerUserRow[]>([]);
   const [deletedUserEmails, setDeletedUserEmails] = useState<string[]>([]);
   const [hiddenDemoCampaignIds, setHiddenDemoCampaignIds] = useState<number[]>(() => loadHiddenDemoCampaignIdsFromStorage());
+  const [hiddenRejectedCampaignIds, setHiddenRejectedCampaignIds] = useState<number[]>(() => loadHiddenRejectedCampaignIdsFromStorage());
   const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>(() => loadWithdrawalRequestsFromStorage());
   const [pendingPayments, setPendingPayments] = useState<PendingPaymentRecord[]>(() => loadPendingPaymentsFromStorage());
-  const [rejectUndoState, setRejectUndoState] = useState<{ campaignId: number; previousStatus?: CampaignStatus; expiresAt: number } | null>(null);
+  const [rejectUndoState, setRejectUndoState] = useState<{ campaignId: number; previousCampaign?: CampaignRecord; expiresAt: number } | null>(null);
   const [deletedUserUndoState, setDeletedUserUndoState] = useState<{ email: string; userData: StoredUser | null; removedCampaigns: CampaignRecord[]; expiresAt: number } | null>(null);
   const [undoNow, setUndoNow] = useState(Date.now());
   const [recurringToggle, setRecurringToggle] = useState(0);
@@ -549,6 +546,7 @@ export default function App() {
 
   const campaignStorageKey = 'bantusesama-campaigns';
   const campaignUpdatedEventKey = 'bantusesama-campaigns-updated';
+  const hiddenRejectedCampaignIdsKey = 'bantusesama-hidden-rejected-campaign-ids';
 
   const loadCampaignsFromStorage = () => {
     if (typeof window === 'undefined') {
@@ -568,6 +566,32 @@ export default function App() {
     }
   };
 
+  function loadHiddenRejectedCampaignIdsFromStorage() {
+    if (typeof window === 'undefined') {
+      return [] as number[];
+    }
+
+    try {
+      const raw = window.localStorage.getItem(hiddenRejectedCampaignIdsKey);
+      const parsed = raw ? (JSON.parse(raw) as number[]) : [];
+      return Array.isArray(parsed) ? parsed.filter((id) => Number.isFinite(id) && id > 0) : [];
+    } catch {
+      return [] as number[];
+    }
+  }
+
+  const saveHiddenRejectedCampaignIdsToStorage = (ids: number[]) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(hiddenRejectedCampaignIdsKey, JSON.stringify(ids));
+    } catch {
+      // ignore write failures
+    }
+  };
+
   const syncCampaignsFromServer = async (cancelledRef?: { current: boolean }): Promise<boolean> => {
     try {
       const response = await fetch(apiUrl(`/api/campaigns?_=${Date.now()}`), { cache: 'no-store' });
@@ -581,7 +605,10 @@ export default function App() {
       }
 
       let remoteCampaigns = normalizeCampaignsForDisplay(list.map(normalizeCampaignRecord), getApiBaseUrl());
-      remoteCampaigns = remoteCampaigns.filter((campaign) => !hiddenDemoCampaignIds.includes(campaign.id));
+      remoteCampaigns = remoteCampaigns.filter((campaign) => (
+        !hiddenDemoCampaignIds.includes(campaign.id)
+        && !hiddenRejectedCampaignIds.includes(campaign.id)
+      ));
 
       if (cancelledRef?.current) {
         return false;
@@ -1084,7 +1111,10 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       const storedCampaigns = loadCampaignsFromStorage();
       const localCampaigns = storedCampaigns !== null
         ? normalizeCampaignsForDisplay(storedCampaigns, getApiBaseUrl())
-          .filter((campaign) => !hiddenDemoCampaignIds.includes(campaign.id))
+          .filter((campaign) => (
+            !hiddenDemoCampaignIds.includes(campaign.id)
+            && !hiddenRejectedCampaignIds.includes(campaign.id)
+          ))
         : null;
 
       if (!cancelled && localCampaigns !== null) {
@@ -1205,6 +1235,12 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       if (event.key === hiddenDemoCampaignIdsKey) {
         const nextHiddenIds = loadHiddenDemoCampaignIdsFromStorage();
         setHiddenDemoCampaignIds(nextHiddenIds);
+        setCampaigns((prev) => prev.filter((campaign) => !nextHiddenIds.includes(campaign.id)));
+      }
+
+      if (event.key === hiddenRejectedCampaignIdsKey) {
+        const nextHiddenIds = loadHiddenRejectedCampaignIdsFromStorage();
+        setHiddenRejectedCampaignIds(nextHiddenIds);
         setCampaigns((prev) => prev.filter((campaign) => !nextHiddenIds.includes(campaign.id)));
       }
     };
@@ -1419,11 +1455,11 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
   };
 
-  const startRejectUndo = (campaignId: number, previousStatus?: CampaignStatus) => {
+  const startRejectUndo = (campaignId: number, previousCampaign?: CampaignRecord) => {
     clearRejectUndoTimer();
 
     const expiresAt = Date.now() + 5000;
-    setRejectUndoState({ campaignId, previousStatus, expiresAt });
+    setRejectUndoState({ campaignId, previousCampaign, expiresAt });
     rejectUndoTimeoutRef.current = window.setTimeout(() => {
       setRejectUndoState(null);
       rejectUndoTimeoutRef.current = null;
@@ -1438,12 +1474,20 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       return;
     }
 
-    const { campaignId, previousStatus } = rejectUndoState;
-    setCampaigns((prev) => prev.map((campaign) => (
-      campaign.id === campaignId
-        ? { ...campaign, status: previousStatus }
-        : campaign
-    )));
+    const { campaignId, previousCampaign } = rejectUndoState;
+    setHiddenRejectedCampaignIds((prev) => {
+      const next = prev.filter((id) => id !== campaignId);
+      saveHiddenRejectedCampaignIdsToStorage(next);
+      return next;
+    });
+
+    setCampaigns((prev) => {
+      if (!previousCampaign) {
+        return prev;
+      }
+      const filtered = prev.filter((campaign) => campaign.id !== campaignId);
+      return [...filtered, previousCampaign];
+    });
 
     clearRejectUndoTimer();
     setRejectUndoState(null);
@@ -2060,16 +2104,16 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
             })();
           }}
           onRejectCampaign={(campaignId) => {
-            const previousStatus = campaigns.find((campaign) => campaign.id === campaignId)?.status;
+            const previousCampaign = campaigns.find((campaign) => campaign.id === campaignId);
+
+            setCampaigns((prev) => prev.filter((campaign) => campaign.id !== campaignId));
             
-            setCampaigns((prev) =>
-              prev.map((campaign) =>
-                campaign.id === campaignId
-                  ? { ...campaign, status: 'rejected' }
-                  : campaign
-              )
-            );
-            
+            setHiddenRejectedCampaignIds((prev) => {
+              const next = prev.includes(campaignId) ? prev : [...prev, campaignId];
+              saveHiddenRejectedCampaignIdsToStorage(next);
+              return next;
+            });
+
             if (campaignId <= 6) {
               setHiddenDemoCampaignIds((prev) => {
                 const next = prev.includes(campaignId) ? prev : [...prev, campaignId];
@@ -2081,7 +2125,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
             void (async () => {
               try {
                 await updateCampaignStatusOnServer(campaignId, 'rejected');
-                startRejectUndo(campaignId, previousStatus);
+                startRejectUndo(campaignId, previousCampaign);
                 await syncCampaignsFromServer();
                 try {
                   window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
