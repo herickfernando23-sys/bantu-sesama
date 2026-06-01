@@ -342,16 +342,24 @@ const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
 const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   const rawTarget = toSafeNumber((campaign as CampaignRecord & { target?: number | string }).target, 0);
   const rawGoal = toSafeNumber((campaign as CampaignRecord & { goal?: number | string }).goal, 0);
-  const normalizedTarget = Math.max(0, rawTarget > 0 ? rawTarget : rawGoal);
+  
+  const isSampleCampaign = campaign.id <= 6;
+  
+  // For sample campaigns with zero target/goal, assign default fallback target
+  let normalizedTarget = Math.max(0, rawTarget > 0 ? rawTarget : rawGoal);
+  if (isSampleCampaign && normalizedTarget === 0) {
+    normalizedTarget = 5000000; // Default 5M for sample campaigns
+  }
+  
   const normalizedCollected = Math.max(0, toSafeNumber(campaign.collected, 0));
   const normalizedDonors = Math.max(0, toSafeNumber(campaign.donors, 0));
 
-  const isSampleCampaign = campaign.id <= 6;
-  const fallbackCollected = isSampleCampaign && normalizedCollected === 0 && normalizedDonors === 0 && normalizedTarget > 0
-    ? Math.max(100000, Math.round(normalizedTarget * 0.1))
+  // Apply fallback collected/donors for sample campaigns with zero values
+  const fallbackCollected = isSampleCampaign && normalizedCollected === 0 && normalizedTarget > 0
+    ? Math.max(500000, Math.round(normalizedTarget * 0.15))
     : normalizedCollected;
-  const fallbackDonors = isSampleCampaign && normalizedCollected === 0 && normalizedDonors === 0 && normalizedTarget > 0
-    ? Math.max(1, Math.round(fallbackCollected / 150000))
+  const fallbackDonors = isSampleCampaign && normalizedDonors === 0 && fallbackCollected > 0
+    ? Math.max(2, Math.round(fallbackCollected / 100000))
     : normalizedDonors;
 
   return ({
@@ -2053,14 +2061,23 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           }}
           onRejectCampaign={(campaignId) => {
             const previousStatus = campaigns.find((campaign) => campaign.id === campaignId)?.status;
+            
+            setCampaigns((prev) =>
+              prev.map((campaign) =>
+                campaign.id === campaignId
+                  ? { ...campaign, status: 'rejected' }
+                  : campaign
+              )
+            );
+            
             if (campaignId <= 6) {
               setHiddenDemoCampaignIds((prev) => {
                 const next = prev.includes(campaignId) ? prev : [...prev, campaignId];
                 saveHiddenDemoCampaignIdsToStorage(next);
                 return next;
               });
-              setCampaigns((prev) => prev.filter((campaign) => campaign.id !== campaignId));
             }
+            
             void (async () => {
               try {
                 await updateCampaignStatusOnServer(campaignId, 'rejected');
