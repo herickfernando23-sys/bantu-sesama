@@ -822,29 +822,7 @@ export default function App() {
       '/'
     );
   };
-      // Restore campaign status in localStorage
-      try {
-        const storedCampaignsRaw = window.localStorage.getItem(campaignStorageKey) || '[]';
-        let storedCampaigns = JSON.parse(storedCampaignsRaw);
-      
-        // Check if campaign exists in stored list
-        const campaignExists = storedCampaigns.some((c: CampaignRecord) => c.id === campaignId);
-      
-        if (campaignExists) {
-          // Update the campaign status back to pending
-          storedCampaigns = storedCampaigns.map((c: CampaignRecord) => 
-            c.id === campaignId ? { ...previousCampaign, ...c, status: previousCampaign?.status || 'pending' } : c
-          );
-        } else if (previousCampaign) {
-          // Re-add the campaign if it's not in the list
-          storedCampaigns.push(previousCampaign);
-        }
-      
-        window.localStorage.setItem(campaignStorageKey, JSON.stringify(storedCampaigns));
-        console.log(`[Undo] Restored campaign ${campaignId} in localStorage`);
-      } catch (err) {
-        console.error('[Undo] Failed to update localStorage:', err);
-      }
+
 
   const navigatePage = (nextPage: string) => {
     const resolvedPage = nextPage as Page;
