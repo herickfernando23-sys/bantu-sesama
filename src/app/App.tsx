@@ -540,6 +540,7 @@ export default function App() {
   const campaignListTopRef = useRef<HTMLDivElement | null>(null);
 
   const campaignStorageKey = 'bantusesama-campaigns';
+  const campaignUpdatedEventKey = 'bantusesama-campaigns-updated';
 
   const loadCampaignsFromStorage = () => {
     if (typeof window === 'undefined') {
@@ -559,31 +560,40 @@ export default function App() {
     }
   };
 
-  const syncCampaignsFromServer = async (cancelledRef?: { current: boolean }) => {
+  const syncCampaignsFromServer = async (cancelledRef?: { current: boolean }): Promise<boolean> => {
     try {
-      const response = await fetch(apiUrl('/api/campaigns'));
+      const response = await fetch(apiUrl(`/api/campaigns?_=${Date.now()}`), { cache: 'no-store' });
       if ((cancelledRef?.current ?? false) || !response.ok) {
-        return;
+        return false;
       }
 
       const list = await response.json();
       if (!Array.isArray(list)) {
-        return;
+        return false;
       }
 
       let remoteCampaigns = normalizeCampaignsForDisplay(list.map(normalizeCampaignRecord), getApiBaseUrl());
       remoteCampaigns = remoteCampaigns.filter((campaign) => !hiddenDemoCampaignIds.includes(campaign.id));
 
       if (cancelledRef?.current) {
-        return;
+        return false;
       }
 
       // Server-side campaign list should be authoritative for public listings.
-      // This removes campaigns that were rejected, deleted, or filtered out on the backend.
       setCampaigns(remoteCampaigns);
-      window.localStorage.setItem(campaignStorageKey, JSON.stringify(remoteCampaigns));
+      try {
+        window.localStorage.setItem(campaignStorageKey, JSON.stringify(remoteCampaigns));
+      } catch {
+        // ignore write failures
+      }
+      try {
+        window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
+      } catch {
+        // ignore write failures
+      }
+      return true;
     } catch (err) {
-      // Keep local data when the backend is unreachable.
+      return false;
     }
   };
 
@@ -1064,11 +1074,11 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       }
 
       const storedCampaigns = loadCampaignsFromStorage();
-
       const localCampaigns = storedCampaigns !== null
         ? normalizeCampaignsForDisplay(storedCampaigns, getApiBaseUrl())
           .filter((campaign) => !hiddenDemoCampaignIds.includes(campaign.id))
         : null;
+
       if (!cancelled && localCampaigns !== null) {
         setCampaigns(localCampaigns);
       }
@@ -1077,7 +1087,10 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
         setCampaignsHydrated(true);
       }
 
-      await syncCampaignsFromServer({ current: cancelled });
+      const synced = await syncCampaignsFromServer({ current: cancelled });
+      if (!cancelled && !synced && localCampaigns !== null) {
+        setCampaigns(localCampaigns);
+      }
     })();
 
     return () => {
@@ -1100,7 +1113,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       if (document.visibilityState === 'visible') {
         void syncCampaignsFromServer();
       }
-    }, 60000);
+    }, 15000);
 
     window.addEventListener('focus', handleFocusSync);
     document.addEventListener('visibilitychange', handleVisibilitySync);
@@ -1156,11 +1169,8 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === campaignStorageKey) {
-        const storedCampaigns = loadCampaignsFromStorage();
-        if (storedCampaigns) {
-          setCampaigns(storedCampaigns);
-        }
+      if (event.key === campaignStorageKey || event.key === campaignUpdatedEventKey) {
+        void syncCampaignsFromServer();
       }
 
       if (event.key === adminSessionKey) {
@@ -2030,6 +2040,11 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
               try {
                 await updateCampaignStatusOnServer(campaignId, 'verified');
                 await syncCampaignsFromServer();
+                try {
+                  window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
+                } catch {
+                  // ignore write failures
+                }
               } catch (err) {
                 console.error(err);
                 window.alert('Gagal memverifikasi kampanye. Coba lagi.');
@@ -2051,6 +2066,11 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                 await updateCampaignStatusOnServer(campaignId, 'rejected');
                 startRejectUndo(campaignId, previousStatus);
                 await syncCampaignsFromServer();
+                try {
+                  window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
+                } catch {
+                  // ignore write failures
+                }
               } catch (err) {
                 console.error(err);
                 window.alert('Gagal menolak kampanye. Coba lagi.');
