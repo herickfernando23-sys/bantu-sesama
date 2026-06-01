@@ -2127,18 +2127,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                   window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
                 } catch {
                   // ignore write failures
-              // Also update campaigns in localStorage with rejected status
-              try {
-                const storedCampaignsRaw = window.localStorage.getItem(campaignStorageKey) || '[]';
-                const storedCampaigns = JSON.parse(storedCampaignsRaw);
-                const updatedStored = storedCampaigns.map((c: CampaignRecord) => 
-                  c.id === campaignId ? { ...c, status: 'rejected' } : c
-                );
-                window.localStorage.setItem(campaignStorageKey, JSON.stringify(updatedStored));
-                console.log(`[Reject] Updated localStorage campaign ${campaignId} status to rejected`);
-              } catch (err) {
-                console.error('[Reject] Failed to update localStorage:', err);
-              }
+                }
                 }
               } catch (err) {
                 console.error(err);
