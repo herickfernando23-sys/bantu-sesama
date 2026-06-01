@@ -927,18 +927,21 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     let cancelled = false;
 
     (async () => {
-      const storedUsers = loadRegisteredUsersFromStorage();
-      storedUsers.forEach((storedUser) => {
-        void fetch(apiUrl('/api/auth/register'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            name: storedUser.name,
-            email: storedUser.email,
-            password: storedUser.password
-          })
-        }).catch(() => null);
-      });
+      const shouldSyncUsersToBackend = import.meta.env.DEV && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+      if (shouldSyncUsersToBackend) {
+        const storedUsers = loadRegisteredUsersFromStorage();
+        storedUsers.forEach((storedUser) => {
+          void fetch(apiUrl('/api/auth/register'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: storedUser.name,
+              email: storedUser.email,
+              password: storedUser.password
+            })
+          }).catch(() => null);
+        });
+      }
 
       const storedCampaigns = loadCampaignsFromStorage() || [];
 
