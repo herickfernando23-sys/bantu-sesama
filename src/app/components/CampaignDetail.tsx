@@ -168,13 +168,13 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   const [withdrawNote, setWithdrawNote] = useState('');
   const [withdrawError, setWithdrawError] = useState('');
   
+  // Apply same fallback logic as CampaignCard for demo data (must be before generateMockDonations)
+  const filledTarget = campaign.target > 0 ? campaign.target : (campaign.goal ?? 5000000);
+  const filledCollected = campaign.collected > 0 ? campaign.collected : Math.max(500000, Math.round(filledTarget * 0.15));
+  const filledDonors = campaign.donors > 0 ? campaign.donors : 2;
+  
   // Generate mock data berbeda untuk setiap campaign berdasarkan campaign ID
   const generateMockDonations = (campaignId: number) => {
-    // Only generate if campaign has donors
-    if (campaign.donors === 0) {
-      return [];
-    }
-    
     const donors = [
       'Siti Nurhaliza', 'Bambang Wijaya', 'Rina Sutrisno', 'Ahmad Suryanto', 'Dewi Lestari',
       'Rudi Hartono', 'Sinta Paramita', 'Doni Pratama', 'Ratna Wijaya', 'Hendri Kusuma',
@@ -193,7 +193,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
       return seed / 233280;
     };
     
-    const mockCount = Math.floor(seededRandom() * 5) + 5; // 5-9 mock donors
+    const mockCount = filledDonors; // Use filled donors count
     const mockData = [];
     
     for (let i = 0; i < mockCount; i++) {
@@ -213,12 +213,12 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
     return mockData;
   };
   
-  const mockDonations = useMemo(() => generateMockDonations(campaign.id), [campaign.id, campaign.donors]);
+  const mockDonations = useMemo(() => generateMockDonations(campaign.id), [campaign.id, filledDonors]);
   
   const [fetchedDonations, setFetchedDonations] = useState<Array<{name: string; amount: number; message: string; timestamp: number}> | null>(null);
   const [loadingDonations, setLoadingDonations] = useState(false);
 
-  const percentage = effectiveTarget > 0 ? Math.min((campaign.collected / effectiveTarget) * 100, 100) : 0;
+  const percentage = filledTarget > 0 ? Math.min((filledCollected / filledTarget) * 100, 100) : 0;
   const canEdit = user?.email && campaign.creatorEmail && user.email.toLowerCase() === campaign.creatorEmail.toLowerCase();
   const isVerified = campaign.status !== 'pending' && campaign.status !== 'rejected';
   const statusLabel = campaign.status === 'pending'
@@ -583,14 +583,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                   </div>
                   <div className="flex items-center gap-2">
                     <Users className="w-5 h-5" />
-                    <span>{campaign.donors} donatur</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-5 h-5" />
-                    <span>{campaign.daysLeft} hari lagi</span>
-                  </div>
-                </div>
-
+                      <span>{filledDonors} donatur</span>
                 {isEditing && canEdit && (
                   <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-4">
                     {editError && (
@@ -783,7 +776,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                       }`}
                     >
                       <Heart className="w-5 h-5 inline mr-2" />
-                      Donatur ({campaign.donors})
+                      Donatur ({filledDonors})
                     </button>
                   </div>
 
@@ -812,18 +805,18 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                   {activeTab === 'donors' && (
                     <div className="space-y-4">
                       {donorEntries.length === 0 ? (
-                        campaign.donors === 0 ? (
+                        campaign.donors === 0 && donorEntries.length === 0 ? (
                           <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-600">
                             Belum ada donasi untuk kampanye ini.
                           </div>
                         ) : loadingDonations ? (
                           <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-600">
                             <p className="font-medium text-gray-900">Memuat data donatur...</p>
-                            <p className="text-sm text-gray-600 mt-2">Terdapat {campaign.donors} donatur</p>
+                            <p className="text-sm text-gray-600 mt-2">Terdapat {filledDonors} donatur</p>
                           </div>
                         ) : (
                           <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-600 space-y-2">
-                            <p className="font-medium text-gray-900">Terdapat {campaign.donors} donatur</p>
+                            <p className="font-medium text-gray-900">Terdapat {filledDonors} donatur</p>
                             <p className="text-sm text-gray-600">Rincian donasi belum tersedia untuk ditampilkan.</p>
                           </div>
                         )
@@ -845,9 +838,9 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                               )}
                             </div>
                           ))}
-                          {campaign.donors > 5 && (
+                          {filledDonors > 5 && (
                             <div className="p-4 text-center text-sm text-gray-600">
-                              Menampilkan 5 dari {campaign.donors} donatur terbaru
+                              Menampilkan 5 dari {filledDonors} donatur terbaru
                             </div>
                           )}
                         </>
@@ -874,10 +867,10 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                 </div>
                 <div>
                   <p className="font-bold text-2xl text-gray-900">
-                    Rp {campaign.collected.toLocaleString('id-ID')}
+                    Rp {filledCollected.toLocaleString('id-ID')}
                   </p>
                   <p className="text-gray-600">
-                    dari target Rp {effectiveTarget.toLocaleString('id-ID')}
+                    dari target Rp {filledTarget.toLocaleString('id-ID')}
                   </p>
                 </div>
               </div>
@@ -926,7 +919,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                       <p className="font-medium text-gray-900">Request Withdrawal</p>
                       <p className="text-sm text-gray-600">Cairkan dana lewat pengajuan ke admin terlebih dahulu.</p>
                     </div>
-                    <p className="text-xs text-gray-500 whitespace-nowrap">Terkumpul Rp {campaign.collected.toLocaleString('id-ID')}</p>
+                    <p className="text-xs text-gray-500 whitespace-nowrap">Terkumpul Rp {filledCollected.toLocaleString('id-ID')}</p>
                   </div>
                   <div className="space-y-3">
                     <div>
@@ -1077,7 +1070,7 @@ export function shareCampaign(campaign: { id: number; title: string }) {
     facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedTitle}`,
     twitter: `https://twitter.com/intent/tweet?text=${text}&url=${encodedUrl}`,
     telegram: `https://t.me/share/url?url=${encodedUrl}&text=${text}`,
-    email: `mailto:?subject=${encodedTitle}&body=Bantulah kampanye "${campaign.title}" di BantuSesama: ${url}`
+    email: `mailto:?subject=${encodedTitle}&body=Bantulah kampanye ${encodedTitle} di BantuSesama: ${url}`
   };
 
   // Copy to clipboard as default

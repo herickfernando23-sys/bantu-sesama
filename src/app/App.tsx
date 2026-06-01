@@ -161,7 +161,15 @@ const legacyPaginationMockTitles = new Set([
   'Tukang Jahit Bu Titin Kembali Beroperasi',
   'Pedagang Kaki Lima Butuh Gerobak Baru',
   'Ibu Rani Butuh Modal untuk Toko Kelontong',
-  'Koperasi UKM Butuh Dana Operasional'
+  'Koperasi UKM Butuh Dana Operasional',
+  'Warung Bu Siti - Renovasi Dapur',
+  'Modal Usaha Korban Kebakaran Pasar',
+  'Gerobak Baru untuk Pak Joko',
+  'Bantuan Modal Toko Kelontong Ibu Rani',
+  'Dukungan Untuk Tukang Jahit Kecil',
+  'CCZXCC',
+  'Bantuan Modal Usaha Mikro',
+  'Dukungan UMKM Lokal'
 ]);
 
 const loadRegisteredUsersFromStorage = () => {
@@ -1204,19 +1212,6 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       return;
     }
 
-    setCampaigns((prev) => prev.filter((campaign) => {
-      const isLegacyMockId = campaign.id >= 7 && campaign.id <= 12;
-      const isLegacyMockTitle = legacyPaginationMockTitles.has(toSafeText(campaign.title));
-      const hasNoCreator = !toSafeText(campaign.creatorEmail);
-      return !(isLegacyMockId && isLegacyMockTitle && hasNoCreator);
-    }));
-  }, [campaignsHydrated]);
-
-  useEffect(() => {
-    if (!campaignsHydrated) {
-      return;
-    }
-
     try {
       window.localStorage.setItem(campaignStorageKey, JSON.stringify(campaigns));
     } catch {
@@ -1278,6 +1273,20 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       && !hiddenRejectedCampaignIds.includes(campaign.id)
     )));
   }, [hiddenRejectedCampaignIds]);
+
+  useEffect(() => {
+    if (!campaignsHydrated) {
+      return;
+    }
+
+    setCampaigns((prev) => {
+      const filtered = prev.filter((campaign) => !legacyPaginationMockTitles.has(toSafeText(campaign.title)));
+      if (filtered.length === prev.length) {
+        return prev;
+      }
+      return filtered;
+    });
+  }, [campaignsHydrated]);
 
   useEffect(() => {
     if (!rejectUndoState && !deletedUserUndoState) {
@@ -1395,6 +1404,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       campaign.status !== 'rejected'
       && !hiddenDemoCampaignIds.includes(campaign.id)
       && !hiddenRejectedCampaignIds.includes(campaign.id)
+      && !legacyPaginationMockTitles.has(toSafeText(campaign.title))
     ));
 
   const donationHistoryForDisplay = campaignsForDisplay.flatMap((campaign) => {
@@ -2127,7 +2137,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           </div>
         )}
         <AdminDashboard
-          campaigns={campaigns}
+          campaigns={campaigns.filter((c) => !legacyPaginationMockTitles.has(toSafeText(c.title)))}
           users={adminUsers}
           withdrawalRequests={withdrawalRequests}
           user={adminUser}
