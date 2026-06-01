@@ -167,7 +167,6 @@ function TipsPanel() {
 export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onVerifyCampaign, onRejectCampaign, onDeleteUser, onUpdateWithdrawalStatus, onClearWithdrawals, onLogout }: AdminDashboardProps) {
   const PAGE_SIZE = 6;
   const [campaignPage, setCampaignPage] = useState(1);
-  const [campaignFadeOut, setCampaignFadeOut] = useState(false);
   const pageTransitionTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
@@ -188,9 +187,6 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
     const normalizedTarget = Math.max(0, rawTarget > 0 ? rawTarget : rawGoal);
     const normalizedCollected = Math.max(0, toSafeNumber(campaign.collected, 0));
     const normalizedDonors = Math.max(0, toSafeNumber(campaign.donors, 0));
-    const normalizedStatus = campaign.id <= 6
-      ? (campaign.status === 'rejected' ? 'rejected' : 'verified')
-      : (campaign.status ?? 'pending');
 
     return {
       ...campaign,
@@ -203,7 +199,7 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
       target: normalizedTarget,
       collected: normalizedCollected,
       donors: normalizedDonors,
-      status: normalizedStatus,
+      status: campaign.status ?? 'pending',
     };
   });
 
@@ -221,12 +217,9 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
       window.clearTimeout(pageTransitionTimerRef.current);
     }
 
-    setCampaignFadeOut(true);
-    pageTransitionTimerRef.current = window.setTimeout(() => {
-      setCampaignPage(nextPage);
-      window.requestAnimationFrame(() => setCampaignFadeOut(false));
-      pageTransitionTimerRef.current = null;
-    }, 220);
+    // Removed fade-out animation that caused flickering - now change page immediately
+    setCampaignPage(nextPage);
+    pageTransitionTimerRef.current = null;
   };
 
   const totalRaised = normalizedCampaigns.reduce((sum, campaign) => sum + campaign.collected, 0);
@@ -720,7 +713,7 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
               </CardDescription>
             </CardHeader>
             <CardContent className="px-6 pb-6">
-              <div className={`w-full max-h-[420px] overflow-y-auto overflow-x-hidden rounded-2xl border border-slate-700 transition-opacity duration-300 ${campaignFadeOut ? 'opacity-0' : 'opacity-100'}`}>
+              <div className={`w-full max-h-[420px] overflow-y-auto overflow-x-hidden rounded-2xl border border-slate-700`}>
                 <table className="w-full table-fixed text-left text-sm">
                   <thead className="sticky top-0 z-10 bg-slate-800 text-slate-400 border-b border-slate-700">
                     <tr>

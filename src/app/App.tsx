@@ -351,7 +351,9 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   const normalizedCollected = Math.max(0, toSafeNumber(campaign.collected, 0));
   const normalizedDonors = Math.max(0, toSafeNumber(campaign.donors, 0));
 
-  const fallbackCollected = normalizedCollected === 0 && normalizedTarget > 0
+  // Only apply fallback to demo/seed campaigns (id <= 6), not to user-created campaigns
+  const isDemo = campaign.id <= 6;
+  const fallbackCollected = isDemo && normalizedCollected === 0 && normalizedTarget > 0
     ? Math.max(500000, Math.round(normalizedTarget * 0.15))
     : normalizedCollected;
   const fallbackDonors = normalizedDonors === 0 && fallbackCollected > 0
@@ -657,6 +659,7 @@ export default function App() {
     const normalizedItems = items.map(normalizeCampaignRecord);
 
     return dedupeCampaigns(normalizedItems)
+      .filter((campaign) => campaign.status !== 'rejected')
       .map((campaign) => {
       if (campaign && typeof campaign.id === 'number' && originalImagesFor1to6[campaign.id]) {
         return { ...campaign, image: originalImagesFor1to6[campaign.id] };
@@ -2155,6 +2158,10 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
               try {
                 await updateCampaignStatusOnServer(campaignId, 'rejected');
                 startRejectUndo(campaignId, previousCampaign);
+                
+                // Wait briefly to ensure server updated status before syncing
+                await new Promise(resolve => window.setTimeout(resolve, 200));
+                
                 await syncCampaignsFromServer(undefined, nextHiddenDemoIds, nextHiddenRejectedIds);
                 try {
                   window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
