@@ -358,8 +358,12 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
     ? Math.max(2, Math.round(fallbackCollected / 100000))
     : normalizedDonors;
 
+  const migratedCampaign = migrateLegacyCampaignId(campaign);
+  const normalizedId = Number(migratedCampaign.id);
+
   return ({
-  ...migrateLegacyCampaignId(campaign),
+  ...migratedCampaign,
+  id: Number.isFinite(normalizedId) && normalizedId > 0 ? normalizedId : 0,
   createdAt: campaign.createdAt ?? Date.now(),
   title: stripMarkdownHeading(campaign.title),
   description: stripMarkdownHeading(campaign.description),
@@ -615,6 +619,7 @@ export default function App() {
       remoteCampaigns = remoteCampaigns.filter((campaign) => (
         !hiddenDemoIds.has(campaign.id)
         && !hiddenRejectedIds.has(campaign.id)
+        && campaign.status !== 'rejected'
       ));
 
       if (cancelledRef?.current) {
@@ -1255,6 +1260,17 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
+
+  useEffect(() => {
+    if (hiddenRejectedCampaignIds.length === 0) {
+      return;
+    }
+
+    setCampaigns((prev) => prev.filter((campaign) => (
+      campaign.status !== 'rejected'
+      && !hiddenRejectedCampaignIds.includes(campaign.id)
+    )));
+  }, [hiddenRejectedCampaignIds]);
 
   useEffect(() => {
     if (!rejectUndoState && !deletedUserUndoState) {
@@ -2113,7 +2129,13 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           onRejectCampaign={(campaignId) => {
             const previousCampaign = campaigns.find((campaign) => campaign.id === campaignId);
 
-            setCampaigns((prev) => prev.filter((campaign) => campaign.id !== campaignId));
+            const nextCampaigns = campaigns.filter((campaign) => campaign.id !== campaignId);
+            setCampaigns(nextCampaigns);
+            try {
+              window.localStorage.setItem(campaignStorageKey, JSON.stringify(nextCampaigns));
+            } catch {
+              // ignore write failures
+            }
 
             const nextHiddenRejectedIds = hiddenRejectedCampaignIds.includes(campaignId)
               ? hiddenRejectedCampaignIds

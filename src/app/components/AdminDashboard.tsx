@@ -329,8 +329,8 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
 
       let resp = await requestBannerUpload().catch(() => null);
 
-      if (!resp.ok) {
-        const body = await resp.json().catch(() => ({}));
+      if (!resp || !resp.ok) {
+        const body = await resp?.json().catch(() => ({}));
         throw new Error(body.error || 'Upload gagal');
       }
 
