@@ -20,6 +20,8 @@ interface Campaign {
   category: string;
   organizer: string;
   story: string;
+  status?: string;
+  goal?: number;
   fundAllocation: Array<{name: string; value: number; color: string}>;
   disbursementHistory: Array<{date: string; amount: number; purpose: string}>;
   donations?: Array<{name: string; amount: number; message: string; timestamp: number}>;
@@ -305,7 +307,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
 
   // Close share menu when clicking outside
   useEffect(() => {
-    function handleOutsideClick(e: MouseEvent) {
+    function handleOutsideClick(e: Event) {
       if (!showShareMenu) return;
       const target = e.target as Node | null;
       if (shareMenuRef.current && target && !shareMenuRef.current.contains(target)) {
@@ -583,7 +585,8 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                   </div>
                   <div className="flex items-center gap-2">
                     <Users className="w-5 h-5" />
-                      <span>{filledDonors} donatur</span>
+                    <span>{filledDonors} donatur</span>
+                  </div>
                 {isEditing && canEdit && (
                   <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-4">
                     {editError && (
@@ -742,6 +745,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                     </div>
                   </div>
                 )}
+              </div>
 
                 <div className="border-t border-gray-200 pt-6">
                   <div className="flex gap-4 mb-6">
