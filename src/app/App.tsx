@@ -120,6 +120,7 @@ const withdrawalRequestsKey = 'bantusesama-withdrawal-requests';
 const pendingPaymentsKey = 'bantusesama-pending-payments';
 const userSessionKey = 'bantusesama-user-session';
 const recurringDonationsKey = 'bantusesama-recurring-donors';
+const toSafeText = (value: unknown) => String(value ?? '').trim();
 const legacyCampaignIdMap: Record<number, number> = {
   1001: 7,
   1002: 8,
@@ -241,13 +242,13 @@ const getRecurringDonationForEmail = (email?: string | null) => {
 };
 
 const buildCampaignFingerprint = (campaign: CampaignRecord) => [
-  campaign.title.trim().toLowerCase(),
-  campaign.description.trim().toLowerCase(),
-  campaign.location.trim().toLowerCase(),
+  toSafeText(campaign.title).toLowerCase(),
+  toSafeText(campaign.description).toLowerCase(),
+  toSafeText(campaign.location).toLowerCase(),
   String(campaign.target),
-  (campaign.creatorEmail || '').trim().toLowerCase(),
-  (campaign.organizer || '').trim().toLowerCase(),
-  campaign.category.trim().toLowerCase(),
+  toSafeText(campaign.creatorEmail).toLowerCase(),
+  toSafeText(campaign.organizer).toLowerCase(),
+  toSafeText(campaign.category).toLowerCase(),
 ].join('|');
 
 const migrateLegacyCampaignId = (campaign: CampaignRecord): CampaignRecord => {
@@ -274,9 +275,15 @@ const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
 const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => ({
   ...migrateLegacyCampaignId(campaign),
   createdAt: campaign.createdAt ?? Date.now(),
-  fullDescription: campaign.fullDescription || campaign.story || campaign.description || '',
-  story: campaign.story || campaign.fullDescription || campaign.description || '',
+  title: toSafeText(campaign.title),
+  description: toSafeText(campaign.description),
+  fullDescription: toSafeText(campaign.fullDescription || campaign.story || campaign.description),
+  story: toSafeText(campaign.story || campaign.fullDescription || campaign.description),
   image: campaign.image || '',
+  location: toSafeText(campaign.location),
+  category: toSafeText(campaign.category),
+  organizer: toSafeText(campaign.organizer),
+  creatorEmail: toSafeText(campaign.creatorEmail),
   fundAllocation: Array.isArray(campaign.fundAllocation) ? campaign.fundAllocation : [],
   disbursementHistory: Array.isArray(campaign.disbursementHistory) ? campaign.disbursementHistory : [],
   donations: Array.isArray(campaign.donations) ? campaign.donations : []
