@@ -25,6 +25,12 @@ const shouldUseSsl = databaseSslEnabled || databaseHost.endsWith('.supabase.co')
 
 const sequelize = new Sequelize(databaseUrl, {
   logging: false,
+  pool: {
+    max: 5,
+    min: 1,
+    acquire: 30000,  // max time (ms) to get connection from pool
+    idle: 10000      // max time (ms) connection can be idle before being released
+  },
   dialectOptions: shouldUseSsl
     ? {
         family: 4,
@@ -33,7 +39,9 @@ const sequelize = new Sequelize(databaseUrl, {
           rejectUnauthorized: false
         }
       }
-    : undefined
+    : undefined,
+  connectTimeoutMs: 30000,  // Time to try connection before timeout
+  requestTimeout: 30000     // Time for each request
 });
 
 const User = require('./user')(sequelize);

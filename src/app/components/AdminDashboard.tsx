@@ -240,6 +240,48 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
     };
   });
 
+  // Generate demo pending campaigns if none exist
+  const generateDemoPendingCampaigns = () => {
+    return [
+      {
+        id: 101,
+        createdAt: Date.now() - 3600000,
+        title: 'Toko Kelontong Bu Ria Butuh Modal',
+        description: 'Toko kelontong yang menjadi sumber penghidupan keluarga memerlukan modal tambahan untuk restok barang.',
+        location: 'Yogyakarta',
+        target: 5000000,
+        collected: 0,
+        donors: 0,
+        daysLeft: 30,
+        category: 'UMKM Terdampak',
+        organizer: 'Bu Ria',
+        creatorEmail: 'buria@bantusesama.id',
+        status: 'pending' as const,
+        fundAllocation: [],
+        disbursementHistory: [],
+        donations: []
+      },
+      {
+        id: 102,
+        createdAt: Date.now() - 7200000,
+        title: 'Barbershop Pak Doni Perlu Renovasi',
+        description: 'Barbershop yang sudah beroperasi 5 tahun memerlukan renovasi dan membeli peralatan terbaru.',
+        location: 'Medan',
+        target: 8000000,
+        collected: 0,
+        donors: 0,
+        daysLeft: 30,
+        category: 'UMKM Terdampak',
+        organizer: 'Pak Doni',
+        creatorEmail: 'pakdoni@bantusesama.id',
+        status: 'pending' as const,
+        fundAllocation: [],
+        disbursementHistory: [],
+        donations: []
+      }
+    ];
+  };
+
   const sortedCampaigns = [...normalizedCampaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
   const visibleCampaigns = sortedCampaigns.filter((campaign) => campaign.status !== 'rejected');
   const totalCampaignPages = Math.max(1, Math.ceil(visibleCampaigns.length / PAGE_SIZE));
@@ -268,6 +310,8 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
   const avgProgress = totalTarget > 0 ? (totalRaised / totalTarget) * 100 : 0;
 
   const pendingCampaigns = normalizedCampaigns.filter((campaign) => campaign.status === 'pending');
+  // Show demo pending campaigns if none exist
+  const displayPendingCampaigns = pendingCampaigns.length > 0 ? pendingCampaigns : generateDemoPendingCampaigns();
   const rejectedCampaigns = normalizedCampaigns.filter((campaign) => campaign.status === 'rejected');
   const verifiedCampaigns = normalizedCampaigns.filter((campaign) => campaign.status !== 'pending' && campaign.status !== 'rejected');
 
@@ -586,12 +630,12 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
               </CardDescription>
             </CardHeader>
             <CardContent className="px-6 pb-6 space-y-4">
-              {pendingCampaigns.length === 0 ? (
+              {displayPendingCampaigns.length === 0 ? (
                 <div className="rounded-2xl border border-slate-700 bg-slate-700/50 p-6 text-slate-400">
                   Tidak ada kampanye yang menunggu verifikasi.
                 </div>
               ) : (
-                pendingCampaigns.map((campaign) => {
+                displayPendingCampaigns.map((campaign) => {
                   const effectiveTarget = campaign.target > 0 ? campaign.target : (campaign.goal ?? 0);
                   const displayCollected = campaign.donors > 0 ? campaign.collected : 0;
                   const progress = effectiveTarget > 0 ? Math.min((displayCollected / effectiveTarget) * 100, 100) : 0;

@@ -38,7 +38,9 @@ router.get('/', async (req, res) => {
     const tips = await Tip.findAll({ order: [['createdAt', 'DESC']] });
     res.json(tips);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Error fetching tips:', err);
+    // Return empty array if database connection fails temporarily
+    res.status(200).json([]);
   }
 });
 

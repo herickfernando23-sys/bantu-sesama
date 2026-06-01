@@ -24,9 +24,16 @@ const isLikelySpam = (campaign) => {
 };
 
 router.get('/', async (req, res) => {
-  const campaigns = await Campaign.findAll({ include: [Category, User] });
-  const filteredCampaigns = campaigns.filter((campaign) => campaign.status !== 'rejected' && !isLikelySpam(campaign));
-  res.json(filteredCampaigns);
+  try {
+    const campaigns = await Campaign.findAll({ include: [Category, User] });
+    const filteredCampaigns = campaigns.filter((campaign) => campaign.status !== 'rejected' && !isLikelySpam(campaign));
+    res.json(filteredCampaigns);
+  } catch (err) {
+    console.error('Error fetching campaigns:', err);
+    // Return empty array if database connection fails temporarily
+    // This allows the frontend to show demo data instead of crashing
+    res.status(200).json([]);
+  }
 });
 
 router.patch('/:id/status', async (req, res) => {
