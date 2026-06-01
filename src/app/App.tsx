@@ -822,6 +822,29 @@ export default function App() {
       '/'
     );
   };
+      // Restore campaign status in localStorage
+      try {
+        const storedCampaignsRaw = window.localStorage.getItem(campaignStorageKey) || '[]';
+        let storedCampaigns = JSON.parse(storedCampaignsRaw);
+      
+        // Check if campaign exists in stored list
+        const campaignExists = storedCampaigns.some((c: CampaignRecord) => c.id === campaignId);
+      
+        if (campaignExists) {
+          // Update the campaign status back to pending
+          storedCampaigns = storedCampaigns.map((c: CampaignRecord) => 
+            c.id === campaignId ? { ...previousCampaign, ...c, status: previousCampaign?.status || 'pending' } : c
+          );
+        } else if (previousCampaign) {
+          // Re-add the campaign if it's not in the list
+          storedCampaigns.push(previousCampaign);
+        }
+      
+        window.localStorage.setItem(campaignStorageKey, JSON.stringify(storedCampaigns));
+        console.log(`[Undo] Restored campaign ${campaignId} in localStorage`);
+      } catch (err) {
+        console.error('[Undo] Failed to update localStorage:', err);
+      }
 
   const navigatePage = (nextPage: string) => {
     const resolvedPage = nextPage as Page;
@@ -2126,6 +2149,18 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                   window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
                 } catch {
                   // ignore write failures
+              // Also update campaigns in localStorage with rejected status
+              try {
+                const storedCampaignsRaw = window.localStorage.getItem(campaignStorageKey) || '[]';
+                const storedCampaigns = JSON.parse(storedCampaignsRaw);
+                const updatedStored = storedCampaigns.map((c: CampaignRecord) => 
+                  c.id === campaignId ? { ...c, status: 'rejected' } : c
+                );
+                window.localStorage.setItem(campaignStorageKey, JSON.stringify(updatedStored));
+                console.log(`[Reject] Updated localStorage campaign ${campaignId} status to rejected`);
+              } catch (err) {
+                console.error('[Reject] Failed to update localStorage:', err);
+              }
                 }
               } catch (err) {
                 console.error(err);
@@ -2160,13 +2195,22 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
             void (async () => {
               try {
-                await updateCampaignStatusOnServer(campaignId, 'rejected');
+                  console.log(`[Reject] Menolak kampanye ${campaignId}...`);
+                  const statusUpdateResult = await updateCampaignStatusOnServer(campaignId, 'rejected');
+                  console.log(`[Reject] Status update result:`, statusUpdateResult);
+                
                 startRejectUndo(campaignId, previousCampaign);
                 
                 // Wait briefly to ensure server updated status before syncing
                 await new Promise(resolve => window.setTimeout(resolve, 200));
                 
+                  console.log(`[Reject] Syncing campaigns dari server dengan hidden IDs:`, {
+                    hiddenDemoIds: nextHiddenDemoIds,
+                    hiddenRejectedIds: nextHiddenRejectedIds
+                  });
+                
                 const syncSuccess = await syncCampaignsFromServer(undefined, nextHiddenDemoIds, nextHiddenRejectedIds);
+                  console.log(`[Reject] Sync success:`, syncSuccess);
                 
                 if (!syncSuccess) {
                   console.warn('Sync dari server gagal, mencoba sync ulang...');
