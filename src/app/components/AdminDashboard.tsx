@@ -67,6 +67,95 @@ interface AdminDashboardProps {
   onLogout?: () => void;
 }
 
+function TipsPanel() {
+  const [tips, setTips] = useState<Array<any>>([]);
+  const [loadingTips, setLoadingTips] = useState(false);
+  const [errorTips, setErrorTips] = useState('');
+  const [lastRefresh, setLastRefresh] = useState<number | null>(null);
+
+  const loadTips = async () => {
+    setLoadingTips(true);
+    setErrorTips('');
+    try {
+      const resp = await fetch(apiUrl('/api/tips'));
+      if (!resp.ok) throw new Error('Gagal memuat tips');
+      const list = await resp.json();
+      setTips(list);
+      setLastRefresh(Date.now());
+    } catch (err) {
+      console.error('Load tips error', err);
+      setErrorTips(err instanceof Error ? err.message : 'Gagal memuat tips');
+    } finally {
+      setLoadingTips(false);
+    }
+  };
+
+  const deleteTip = async (tipId: number) => {
+    if (!window.confirm('Hapus tip ini dari daftar?')) return;
+    try {
+      const resp = await fetch(apiUrl(`/api/tips/${tipId}`), { method: 'DELETE' });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.error || 'Gagal menghapus tip');
+      }
+      setTips((current) => current.filter((tip) => tip.id !== tipId));
+    } catch (err) {
+      alert('Gagal menghapus tip: ' + (err instanceof Error ? err.message : String(err)));
+    }
+  };
+
+  useEffect(() => {
+    loadTips();
+    const timer = window.setInterval(() => {
+      loadTips();
+    }, 10000);
+
+    return () => window.clearInterval(timer);
+  }, []);
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <button
+          type="button"
+          onClick={loadTips}
+          className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-100 hover:bg-slate-600"
+        >
+          Muat Ulang
+        </button>
+        <div className="text-xs text-slate-400">
+          {lastRefresh ? `Terakhir diperbarui ${new Date(lastRefresh).toLocaleTimeString()}` : 'Belum diperbarui'}
+        </div>
+      </div>
+      {errorTips && (
+        <div className="rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-sm text-red-200">
+          {errorTips}
+        </div>
+      )}
+      {loadingTips ? (
+        <div className="text-slate-400">Memuat tips...</div>
+      ) : tips.length === 0 ? (
+        <div className="text-slate-400">Belum ada tip masuk.</div>
+      ) : (
+        <div className="space-y-2 max-h-72 overflow-auto">
+          {tips.map((t: any) => (
+            <div key={t.id} className="flex items-center justify-between rounded-lg border border-slate-700 p-3 bg-slate-700/30">
+              <div>
+                <div className="font-medium text-slate-100">Rp {Number(t.amount).toLocaleString('id-ID')} — {t.donorName || 'Anonim'}</div>
+                <div className="text-xs text-slate-400">{new Date(t.createdAt).toLocaleString()}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="text-sm text-slate-300">{t.paymentStatus}</div>
+                <button onClick={() => deleteTip(t.id)} className="rounded px-2 py-1 bg-red-600 text-white text-xs">Hapus</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onVerifyCampaign, onRejectCampaign, onDeleteUser, onUpdateWithdrawalStatus, onClearWithdrawals, onLogout }: AdminDashboardProps) {
   const PAGE_SIZE = 6;
   const [campaignPage, setCampaignPage] = useState(1);
@@ -326,95 +415,6 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
             </div>
           )}
         </div>
-      </div>
-    );
-  };
-
-  const TipsPanel = () => {
-    const [tips, setTips] = useState<Array<any>>([]);
-    const [loadingTips, setLoadingTips] = useState(false);
-    const [errorTips, setErrorTips] = useState('');
-    const [lastRefresh, setLastRefresh] = useState<number | null>(null);
-
-    const loadTips = async () => {
-      setLoadingTips(true);
-      setErrorTips('');
-      try {
-        const resp = await fetch(apiUrl('/api/tips'));
-        if (!resp.ok) throw new Error('Gagal memuat tips');
-        const list = await resp.json();
-        setTips(list);
-        setLastRefresh(Date.now());
-      } catch (err) {
-        console.error('Load tips error', err);
-        setErrorTips(err instanceof Error ? err.message : 'Gagal memuat tips');
-      } finally {
-        setLoadingTips(false);
-      }
-    };
-
-    const deleteTip = async (tipId: number) => {
-      if (!window.confirm('Hapus tip ini dari daftar?')) return;
-      try {
-        const resp = await fetch(apiUrl(`/api/tips/${tipId}`), { method: 'DELETE' });
-        if (!resp.ok) {
-          const body = await resp.json().catch(() => ({}));
-          throw new Error(body.error || 'Gagal menghapus tip');
-        }
-        setTips((current) => current.filter((tip) => tip.id !== tipId));
-      } catch (err) {
-        alert('Gagal menghapus tip: ' + (err instanceof Error ? err.message : String(err)));
-      }
-    };
-
-    useEffect(() => {
-      loadTips();
-      const timer = window.setInterval(() => {
-        loadTips();
-      }, 10000);
-
-      return () => window.clearInterval(timer);
-    }, []);
-
-    return (
-      <div className="space-y-3">
-        <div className="flex items-center justify-between gap-3">
-          <button
-            type="button"
-            onClick={loadTips}
-            className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-100 hover:bg-slate-600"
-          >
-            Muat Ulang
-          </button>
-          <div className="text-xs text-slate-400">
-            {lastRefresh ? `Terakhir diperbarui ${new Date(lastRefresh).toLocaleTimeString()}` : 'Belum diperbarui'}
-          </div>
-        </div>
-        {errorTips && (
-          <div className="rounded-lg border border-red-800 bg-red-950/40 px-3 py-2 text-sm text-red-200">
-            {errorTips}
-          </div>
-        )}
-        {loadingTips ? (
-          <div className="text-slate-400">Memuat tips...</div>
-        ) : tips.length === 0 ? (
-          <div className="text-slate-400">Belum ada tip masuk.</div>
-        ) : (
-          <div className="space-y-2 max-h-72 overflow-auto">
-            {tips.map((t: any) => (
-              <div key={t.id} className="flex items-center justify-between rounded-lg border border-slate-700 p-3 bg-slate-700/30">
-                <div>
-                  <div className="font-medium text-slate-100">Rp {Number(t.amount).toLocaleString('id-ID')} — {t.donorName || 'Anonim'}</div>
-                  <div className="text-xs text-slate-400">{new Date(t.createdAt).toLocaleString()}</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <div className="text-sm text-slate-300">{t.paymentStatus}</div>
-                  <button onClick={() => deleteTip(t.id)} className="rounded px-2 py-1 bg-red-600 text-white text-xs">Hapus</button>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
       </div>
     );
   };
