@@ -1391,7 +1391,11 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   const mockCampaigns = campaignsSortedByTime.filter((campaign) => campaign.id >= 1000);
   const realCampaigns = campaignsSortedByTime.filter((campaign) => campaign.id < 1000);
   const campaignsForDisplay = normalizeCampaignsForDisplay([...mockCampaigns, ...realCampaigns], getApiBaseUrl())
-    .filter((campaign) => campaign.status !== 'rejected' && !hiddenDemoCampaignIds.includes(campaign.id));
+    .filter((campaign) => (
+      campaign.status !== 'rejected'
+      && !hiddenDemoCampaignIds.includes(campaign.id)
+      && !hiddenRejectedCampaignIds.includes(campaign.id)
+    ));
 
   const donationHistoryForDisplay = campaignsForDisplay.flatMap((campaign) => {
     if (campaign.donations && campaign.donations.length > 0) {
