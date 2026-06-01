@@ -597,7 +597,9 @@ export default function App() {
       6: 'https://images.unsplash.com/photo-1767678233351-9308d8220fa5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw1fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080'
     };
 
-    return dedupeCampaigns(items)
+    const normalizedItems = items.map(normalizeCampaignRecord);
+
+    return dedupeCampaigns(normalizedItems)
       .map((campaign) => {
       if (campaign && typeof campaign.id === 'number' && originalImagesFor1to6[campaign.id]) {
         return { ...campaign, image: originalImagesFor1to6[campaign.id] };
@@ -1061,11 +1063,13 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
         });
       }
 
-      const storedCampaigns = loadCampaignsFromStorage() || [];
+      const storedCampaigns = loadCampaignsFromStorage();
 
-      const localCampaigns = normalizeCampaignsForDisplay(storedCampaigns, getApiBaseUrl())
-        .filter((campaign) => !hiddenDemoCampaignIds.includes(campaign.id));
-      if (!cancelled && localCampaigns.length > 0) {
+      const localCampaigns = storedCampaigns !== null
+        ? normalizeCampaignsForDisplay(storedCampaigns, getApiBaseUrl())
+          .filter((campaign) => !hiddenDemoCampaignIds.includes(campaign.id))
+        : null;
+      if (!cancelled && localCampaigns !== null) {
         setCampaigns(localCampaigns);
       }
 
