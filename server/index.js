@@ -180,6 +180,24 @@ app.use('/api/sponsor-banners', sponsorBannersRoutes);
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Route not found handler
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Route not found',
+    method: req.method,
+    path: req.originalUrl
+  });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  if (res.headersSent) return next(err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error'
+  });
+});
+
 const PORT = process.env.PORT || 4000;
 const shouldSyncSchema = String(process.env.DB_SYNC || '').toLowerCase() === 'true' || (!isProduction && String(process.env.DB_SYNC || '').toLowerCase() !== 'false');
 
