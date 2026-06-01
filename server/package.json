@@ -6,7 +6,12 @@
   "scripts": {
     "start": "node index.js",
     "dev": "nodemon index.js",
-    "seed:db": "node -e \"require('./models').sequelize.sync({ alter: true }).then(() => console.log('Database synced!')).catch(err => console.error('Sync error:', err));\""
+    "seed:db": "node -e \"require('./models').sequelize.sync({ alter: true }).then(() => console.log('Database synced!')).catch(err => console.error('Sync error:', err));\"\",
+    "cleanup:preview": "node scripts/cleanup_supabase.js --chatbot-days 30 --tips-days 60 --dry-run",
+    "cleanup:execute": "node scripts/cleanup_supabase.js --chatbot-days 30 --tips-days 60",
+    "cleanup:verbose": "node scripts/cleanup_supabase.js --chatbot-days 30 --tips-days 60 --verbose",
+    "duplicates:check": "node scripts/find_duplicates.js --dry-run",
+    "duplicates:delete": "node scripts/find_duplicates.js --delete"
   },
   "dependencies": {
     "@google/generative-ai": "^0.21.0",

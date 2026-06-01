@@ -26,10 +26,10 @@ const shouldUseSsl = databaseSslEnabled || databaseHost.endsWith('.supabase.co')
 const sequelize = new Sequelize(databaseUrl, {
   logging: false,
   pool: {
-    max: 5,
-    min: 1,
-    acquire: 30000,  // max time (ms) to get connection from pool
-    idle: 10000      // max time (ms) connection can be idle before being released
+    max: 2,            // Reduced from 5 for Supabase free tier
+    min: 0,            // Close idle connections faster
+    acquire: 30000,
+    idle: 5000         // Reduce idle timeout from 10s to 5s
   },
   dialectOptions: shouldUseSsl
     ? {

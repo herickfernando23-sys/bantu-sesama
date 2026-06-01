@@ -150,6 +150,12 @@ function persistChatbotInteraction({ message, response, source, sessionId, aiMod
   }
 
   ChatbotInteraction.create(interaction).catch(() => {});
+
+  // Cleanup old chatbot interactions (auto-delete after 30 days) to reduce Supabase usage
+  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+  ChatbotInteraction.destroy({
+    where: { createdAt: { [require('sequelize').Op.lt]: thirtyDaysAgo } }
+  }).catch(() => {});
 }
 
 // Helper function to get KB response
