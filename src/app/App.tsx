@@ -681,17 +681,20 @@ export default function App() {
 
       try {
         if (typeof campaign.image === 'string') {
+          // Preserve absolute external URLs as-is (do not rewrite to image-proxy).
+          // If image path is root-relative, prefix with apiBase so it resolves correctly.
           if (campaign.image.startsWith('/')) {
             if (apiBase) {
               return { ...campaign, image: `${apiBase}${campaign.image}` };
             }
           }
 
+          // If it's already an absolute http(s) URL, keep it unchanged so the
+          // frontend can load the original image directly. This restores the
+          // previous behaviour where external images were used instead of
+          // forcing the backend image-proxy.
           if (campaign.image.startsWith('http')) {
-            const parsed = new URL(campaign.image);
-            if (apiBase && !campaign.image.startsWith(`${apiBase}/image-proxy`) && parsed.hostname !== window.location.hostname) {
-              return { ...campaign, image: `${apiBase}/image-proxy?url=${encodeURIComponent(campaign.image)}` };
-            }
+            return campaign;
           }
         }
       } catch (err) {
