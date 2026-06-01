@@ -123,6 +123,7 @@ type RecurringDonationRecord = {
 const campaignStorageKey = 'bantusesama-campaigns';
 const campaignCleanupVersionKey = 'bantusesama-campaign-cleanup-version';
 const campaignCleanupVersion = '2026-06-01-v2';
+const hiddenDemoCampaignIdsKey = 'bantusesama-hidden-demo-campaign-ids';
 const registeredUsersKey = 'bantusesama-registered-users';
 const adminSessionKey = 'bantusesama-admin-session';
 const withdrawalRequestsKey = 'bantusesama-withdrawal-requests';
@@ -257,6 +258,32 @@ const loadRecurringDonationsFromStorage = () => {
   }
 };
 
+const loadHiddenDemoCampaignIdsFromStorage = () => {
+  if (typeof window === 'undefined') {
+    return [] as number[];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(hiddenDemoCampaignIdsKey);
+    const parsed = raw ? (JSON.parse(raw) as number[]) : [];
+    return Array.isArray(parsed) ? parsed.filter((id) => Number.isFinite(id) && id > 0) : [];
+  } catch {
+    return [] as number[];
+  }
+};
+
+const saveHiddenDemoCampaignIdsToStorage = (ids: number[]) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(hiddenDemoCampaignIdsKey, JSON.stringify(ids));
+  } catch {
+    // ignore write failures
+  }
+};
+
 const getRecurringDonationForEmail = (email?: string | null) => {
   if (!email) {
     return null;
@@ -316,6 +343,16 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   const rawTarget = toSafeNumber((campaign as CampaignRecord & { target?: number | string }).target, 0);
   const rawGoal = toSafeNumber((campaign as CampaignRecord & { goal?: number | string }).goal, 0);
   const normalizedTarget = Math.max(0, rawTarget > 0 ? rawTarget : rawGoal);
+  const normalizedCollected = Math.max(0, toSafeNumber(campaign.collected, 0));
+  const normalizedDonors = Math.max(0, toSafeNumber(campaign.donors, 0));
+
+  const isSampleCampaign = campaign.id <= 6;
+  const fallbackCollected = isSampleCampaign && normalizedCollected === 0 && normalizedDonors === 0 && normalizedTarget > 0
+    ? Math.max(100000, Math.round(normalizedTarget * 0.1))
+    : normalizedCollected;
+  const fallbackDonors = isSampleCampaign && normalizedCollected === 0 && normalizedDonors === 0 && normalizedTarget > 0
+    ? Math.max(1, Math.round(fallbackCollected / 150000))
+    : normalizedDonors;
 
   return ({
   ...migrateLegacyCampaignId(campaign),
@@ -331,8 +368,8 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   creatorEmail: toSafeText(campaign.creatorEmail),
   goal: rawGoal,
   target: normalizedTarget,
-  collected: Math.max(0, toSafeNumber(campaign.collected, 0)),
-  donors: Math.max(0, toSafeNumber(campaign.donors, 0)),
+  collected: fallbackCollected,
+  donors: fallbackDonors,
   daysLeft: Math.max(0, toSafeNumber(campaign.daysLeft, 0)),
   status: campaign.id <= 6
     ? (campaign.status === 'rejected' ? 'rejected' : 'verified')
@@ -487,6 +524,7 @@ export default function App() {
   const [registeredUsers, setRegisteredUsers] = useState<StoredUser[]>(() => loadRegisteredUsersFromStorage());
   const [serverUsers, setServerUsers] = useState<ServerUserRow[]>([]);
   const [deletedUserEmails, setDeletedUserEmails] = useState<string[]>([]);
+  const [hiddenDemoCampaignIds, setHiddenDemoCampaignIds] = useState<number[]>(() => loadHiddenDemoCampaignIdsFromStorage());
   const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>(() => loadWithdrawalRequestsFromStorage());
   const [pendingPayments, setPendingPayments] = useState<PendingPaymentRecord[]>(() => loadPendingPaymentsFromStorage());
   const [rejectUndoState, setRejectUndoState] = useState<{ campaignId: number; previousStatus?: CampaignStatus; expiresAt: number } | null>(null);
@@ -533,7 +571,8 @@ export default function App() {
         return;
       }
 
-      const remoteCampaigns = normalizeCampaignsForDisplay(list.map(normalizeCampaignRecord), getApiBaseUrl());
+      let remoteCampaigns = normalizeCampaignsForDisplay(list.map(normalizeCampaignRecord), getApiBaseUrl());
+      remoteCampaigns = remoteCampaigns.filter((campaign) => !hiddenDemoCampaignIds.includes(campaign.id));
 
       if (cancelledRef?.current) {
         return;
@@ -1024,7 +1063,8 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
       const storedCampaigns = loadCampaignsFromStorage() || [];
 
-      const localCampaigns = normalizeCampaignsForDisplay(storedCampaigns, getApiBaseUrl());
+      const localCampaigns = normalizeCampaignsForDisplay(storedCampaigns, getApiBaseUrl())
+        .filter((campaign) => !hiddenDemoCampaignIds.includes(campaign.id));
       if (!cancelled && localCampaigns.length > 0) {
         setCampaigns(localCampaigns);
       }
@@ -1138,6 +1178,12 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
       if (event.key === pendingPaymentsKey) {
         setPendingPayments(loadPendingPaymentsFromStorage());
+      }
+
+      if (event.key === hiddenDemoCampaignIdsKey) {
+        const nextHiddenIds = loadHiddenDemoCampaignIdsFromStorage();
+        setHiddenDemoCampaignIds(nextHiddenIds);
+        setCampaigns((prev) => prev.filter((campaign) => !nextHiddenIds.includes(campaign.id)));
       }
     };
 
@@ -1257,7 +1303,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   const mockCampaigns = campaignsSortedByTime.filter((campaign) => campaign.id >= 1000);
   const realCampaigns = campaignsSortedByTime.filter((campaign) => campaign.id < 1000);
   const campaignsForDisplay = normalizeCampaignsForDisplay([...mockCampaigns, ...realCampaigns], getApiBaseUrl())
-    .filter((campaign) => campaign.status !== 'rejected');
+    .filter((campaign) => campaign.status !== 'rejected' && !hiddenDemoCampaignIds.includes(campaign.id));
 
   const donationHistoryForDisplay = campaignsForDisplay.flatMap((campaign) => {
     if (campaign.donations && campaign.donations.length > 0) {
@@ -1988,6 +2034,14 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           }}
           onRejectCampaign={(campaignId) => {
             const previousStatus = campaigns.find((campaign) => campaign.id === campaignId)?.status;
+            if (campaignId <= 6) {
+              setHiddenDemoCampaignIds((prev) => {
+                const next = prev.includes(campaignId) ? prev : [...prev, campaignId];
+                saveHiddenDemoCampaignIdsToStorage(next);
+                return next;
+              });
+              setCampaigns((prev) => prev.filter((campaign) => campaign.id !== campaignId));
+            }
             void (async () => {
               try {
                 await updateCampaignStatusOnServer(campaignId, 'rejected');
