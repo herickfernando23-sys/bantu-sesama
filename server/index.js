@@ -50,11 +50,31 @@ const corsOptions = {
 if (!isProduction) {
   // In development, allow localhost on any port
   corsOptions.origin = function (origin, callback) {
+    // Allow direct browser navigation (no origin) and localhost/127.0.0.1
     if (!origin || /^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) {
       callback(null, true);
-    } else {
-      callback(new Error('CORS policy violation'));
+      return;
     }
+
+    // Allow local network (e.g., http://192.168.x.y:5173) when explicitly enabled
+    const allowLocalNet = String(process.env.ALLOW_LOCAL_NET || '').toLowerCase() === '1';
+    if (allowLocalNet && /^http:\/\/192\.168\.[0-9]{1,3}\.[0-9]{1,3}(:\d+)?$/.test(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    // Also allow a specific CORS origin if set in env for convenience
+    try {
+      const configured = String(process.env.CORS_ORIGIN || '').trim();
+      if (configured && origin === configured) {
+        callback(null, true);
+        return;
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    callback(new Error('CORS policy violation'));
   };
 } else {
   // In production, use specific origin from env
