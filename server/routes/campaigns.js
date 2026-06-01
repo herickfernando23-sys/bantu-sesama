@@ -76,6 +76,8 @@ router.post('/', optionalAuth, async (req, res) => {
   const cleanCategory = toCleanText(category);
   const normalizedGoal = Number(goal);
   const normalizedDaysLeft = Number(daysLeft);
+  const fallbackOrganizer = toCleanText(creatorEmail || req.user?.email || 'Penggalang');
+  const finalOrganizer = cleanOrganizer.length >= 2 ? cleanOrganizer : fallbackOrganizer;
 
   if (!cleanTitle || !cleanDescription || !Number.isFinite(normalizedGoal)) {
     return res.status(400).json({ error: 'title, description, dan goal wajib diisi' });
@@ -93,10 +95,6 @@ router.post('/', optionalAuth, async (req, res) => {
     return res.status(400).json({ error: 'Target dana minimal Rp 100.000' });
   }
 
-  if (cleanOrganizer.length < 2) {
-    return res.status(400).json({ error: 'Nama penggalang minimal 2 karakter' });
-  }
-
   if (cleanLocation.length < 2) {
     return res.status(400).json({ error: 'Lokasi kampanye tidak valid' });
   }
@@ -110,7 +108,7 @@ router.post('/', optionalAuth, async (req, res) => {
     goal: normalizedGoal,
     collected: 0,
     creatorEmail: creatorEmail || req.user?.email || null,
-    organizer: cleanOrganizer,
+    organizer: finalOrganizer,
     location: cleanLocation,
     category: cleanCategory,
     image: image || '',

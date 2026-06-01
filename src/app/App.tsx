@@ -518,6 +518,37 @@ export default function App() {
     }
   };
 
+  const syncCampaignsFromServer = async (cancelledRef?: { current: boolean }) => {
+    try {
+      const response = await fetch(apiUrl('/api/campaigns'));
+      if ((cancelledRef?.current ?? false) || !response.ok) {
+        return;
+      }
+
+      const list = await response.json();
+      if (!Array.isArray(list)) {
+        return;
+      }
+
+      const remoteCampaigns = list.map(normalizeCampaignRecord);
+
+      if (cancelledRef?.current) {
+        return;
+      }
+
+      setCampaigns((currentCampaigns) => {
+        const mergedCampaigns = normalizeCampaignsForDisplay([
+          ...currentCampaigns,
+          ...remoteCampaigns
+        ], getApiBaseUrl());
+        window.localStorage.setItem(campaignStorageKey, JSON.stringify(mergedCampaigns));
+        return mergedCampaigns;
+      });
+    } catch (err) {
+      // Keep local data when the backend is unreachable.
+    }
+  };
+
   const normalizeCampaignsForDisplay = (items: CampaignRecord[], apiBase: string) => {
     const originalImagesFor1to6: Record<number, string> = {
       1: 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
@@ -1003,38 +1034,31 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
         setCampaignsHydrated(true);
       }
 
-      try {
-        const response = await fetch(apiUrl('/api/campaigns'));
-        if (cancelled || !response.ok) {
-          return;
-        }
-
-        const list = await response.json();
-        if (!Array.isArray(list)) {
-          return;
-        }
-
-        const remoteCampaigns = list.map(normalizeCampaignRecord);
-
-        if (cancelled) {
-          return;
-        }
-
-        setCampaigns((currentCampaigns) => {
-          const mergedCampaigns = normalizeCampaignsForDisplay([
-            ...currentCampaigns,
-            ...remoteCampaigns
-          ], getApiBaseUrl());
-          window.localStorage.setItem(campaignStorageKey, JSON.stringify(mergedCampaigns));
-          return mergedCampaigns;
-        });
-      } catch (err) {
-        // Keep local data when the backend is unreachable.
-      }
+      await syncCampaignsFromServer({ current: cancelled });
     })();
 
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleVisibilitySync = () => {
+      if (document.visibilityState === 'visible') {
+        void syncCampaignsFromServer();
+      }
+    };
+
+    const handleFocusSync = () => {
+      void syncCampaignsFromServer();
+    };
+
+    window.addEventListener('focus', handleFocusSync);
+    document.addEventListener('visibilitychange', handleVisibilitySync);
+
+    return () => {
+      window.removeEventListener('focus', handleFocusSync);
+      document.removeEventListener('visibilitychange', handleVisibilitySync);
     };
   }, []);
 
