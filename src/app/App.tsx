@@ -1509,6 +1509,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
 
     const { campaignId, previousCampaign } = rejectUndoState;
+
     setHiddenRejectedCampaignIds((prev) => {
       const next = prev.filter((id) => id !== campaignId);
       saveHiddenRejectedCampaignIdsToStorage(next);
@@ -1525,6 +1526,16 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
     clearRejectUndoTimer();
     setRejectUndoState(null);
+
+    void (async () => {
+      try {
+        await updateCampaignStatusOnServer(campaignId, 'pending');
+        await syncCampaignsFromServer();
+      } catch (err) {
+        console.error('Error undoing rejected campaign:', err);
+        window.alert('Gagal membatalkan penolakan kampanye. Silakan refresh halaman untuk memastikan status terbaru.');
+      }
+    })();
   };
 
   const startDeletedUserUndo = (email: string, userData: StoredUser | null, removedCampaigns: CampaignRecord[]) => {
