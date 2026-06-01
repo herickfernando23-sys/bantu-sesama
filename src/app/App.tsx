@@ -592,7 +592,11 @@ export default function App() {
     }
   };
 
-  const syncCampaignsFromServer = async (cancelledRef?: { current: boolean }): Promise<boolean> => {
+  const syncCampaignsFromServer = async (
+    cancelledRef?: { current: boolean },
+    extraHiddenDemoCampaignIds: number[] = [],
+    extraHiddenRejectedCampaignIds: number[] = []
+  ): Promise<boolean> => {
     try {
       const response = await fetch(apiUrl(`/api/campaigns?_=${Date.now()}`), { cache: 'no-store' });
       if ((cancelledRef?.current ?? false) || !response.ok) {
@@ -604,10 +608,13 @@ export default function App() {
         return false;
       }
 
+      const hiddenDemoIds = new Set([...hiddenDemoCampaignIds, ...extraHiddenDemoCampaignIds]);
+      const hiddenRejectedIds = new Set([...hiddenRejectedCampaignIds, ...extraHiddenRejectedCampaignIds]);
+
       let remoteCampaigns = normalizeCampaignsForDisplay(list.map(normalizeCampaignRecord), getApiBaseUrl());
       remoteCampaigns = remoteCampaigns.filter((campaign) => (
-        !hiddenDemoCampaignIds.includes(campaign.id)
-        && !hiddenRejectedCampaignIds.includes(campaign.id)
+        !hiddenDemoIds.has(campaign.id)
+        && !hiddenRejectedIds.has(campaign.id)
       ));
 
       if (cancelledRef?.current) {
@@ -2107,26 +2114,26 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
             const previousCampaign = campaigns.find((campaign) => campaign.id === campaignId);
 
             setCampaigns((prev) => prev.filter((campaign) => campaign.id !== campaignId));
-            
-            setHiddenRejectedCampaignIds((prev) => {
-              const next = prev.includes(campaignId) ? prev : [...prev, campaignId];
-              saveHiddenRejectedCampaignIdsToStorage(next);
-              return next;
-            });
 
+            const nextHiddenRejectedIds = hiddenRejectedCampaignIds.includes(campaignId)
+              ? hiddenRejectedCampaignIds
+              : [...hiddenRejectedCampaignIds, campaignId];
+            setHiddenRejectedCampaignIds(nextHiddenRejectedIds);
+            saveHiddenRejectedCampaignIdsToStorage(nextHiddenRejectedIds);
+
+            const nextHiddenDemoIds = campaignId <= 6
+              ? (hiddenDemoCampaignIds.includes(campaignId) ? hiddenDemoCampaignIds : [...hiddenDemoCampaignIds, campaignId])
+              : hiddenDemoCampaignIds;
             if (campaignId <= 6) {
-              setHiddenDemoCampaignIds((prev) => {
-                const next = prev.includes(campaignId) ? prev : [...prev, campaignId];
-                saveHiddenDemoCampaignIdsToStorage(next);
-                return next;
-              });
+              setHiddenDemoCampaignIds(nextHiddenDemoIds);
+              saveHiddenDemoCampaignIdsToStorage(nextHiddenDemoIds);
             }
-            
+
             void (async () => {
               try {
                 await updateCampaignStatusOnServer(campaignId, 'rejected');
                 startRejectUndo(campaignId, previousCampaign);
-                await syncCampaignsFromServer();
+                await syncCampaignsFromServer(undefined, nextHiddenDemoIds, nextHiddenRejectedIds);
                 try {
                   window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
                 } catch {
