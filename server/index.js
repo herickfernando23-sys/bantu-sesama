@@ -77,8 +77,10 @@ if (!isProduction) {
     callback(new Error('CORS policy violation'));
   };
 } else {
-  // In production, use specific origin from env
-  corsOptions.origin = corsOrigin || 'https://bantu-sesama.com';
+  // In production, prefer a specific origin from env.
+  // If CORS_ORIGIN is not configured, allow the request origin so the API
+  // can still serve from alternative frontends like preprod or Vercel staging.
+  corsOptions.origin = corsOrigin || true;
 }
 
 app.use(cors(corsOptions));

@@ -1048,7 +1048,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
 }
 
 // add share functionality below component export
-export function shareCampaign(campaign: { id: number; title: string }) {
+export function shareCampaign(campaign: Campaign) {
   const url = `${window.location.origin}/?campaign=${campaign.id}`;
   const encodedUrl = encodeURIComponent(url);
   const encodedTitle = encodeURIComponent(campaign.title);
@@ -1079,7 +1079,7 @@ export function shareCampaign(campaign: { id: number; title: string }) {
   });
 }
 
-export function getShareOptions(campaign: { id: number; title: string }) {
+export function getShareOptions(campaign: Campaign) {
   const url = `${window.location.origin}/?campaign=${campaign.id}`;
   const encodedUrl = encodeURIComponent(url);
   const encodedTitle = encodeURIComponent(campaign.title);
