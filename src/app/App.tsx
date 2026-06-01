@@ -1041,6 +1041,19 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     let cancelled = false;
 
     (async () => {
+      const storedUsers = loadRegisteredUsersFromStorage();
+      storedUsers.forEach((storedUser) => {
+        void fetch(apiUrl('/api/auth/register'), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: storedUser.name,
+            email: storedUser.email,
+            password: storedUser.password
+          })
+        }).catch(() => null);
+      });
+
       const storedCampaigns = loadCampaignsFromStorage() || [];
 
       const localCampaigns = normalizeCampaignsForDisplay(storedCampaigns, getApiBaseUrl());
@@ -1064,6 +1077,41 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
         }
 
         const remoteCampaigns = list.map(normalizeCampaignRecord);
+        const remoteFingerprints = new Set(remoteCampaigns.map(buildCampaignFingerprint));
+        const localOnlyCampaigns = localCampaigns.filter((campaign) => !remoteFingerprints.has(buildCampaignFingerprint(campaign)));
+
+        for (const campaign of localOnlyCampaigns) {
+          if (cancelled) {
+            break;
+          }
+
+          try {
+            const uploadResponse = await fetch(apiUrl('/api/campaigns'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                title: campaign.title,
+                description: campaign.description,
+                goal: campaign.target,
+                creatorEmail: campaign.creatorEmail,
+                organizer: campaign.organizer,
+                location: campaign.location,
+                category: campaign.category,
+                image: campaign.image,
+                status: campaign.status || 'pending',
+                daysLeft: campaign.daysLeft || 30,
+                fullDescription: campaign.fullDescription || campaign.story || campaign.description
+              })
+            });
+
+            if (uploadResponse.ok) {
+              const createdCampaign = normalizeCampaignRecord(await uploadResponse.json());
+              remoteCampaigns.push(createdCampaign);
+            }
+          } catch (err) {
+            // Ignore upload failures and keep local data usable.
+          }
+        }
 
         if (cancelled) {
           return;
