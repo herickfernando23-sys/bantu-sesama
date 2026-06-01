@@ -8,6 +8,7 @@ interface CampaignCardProps {
   image: string;
   location: string;
   target: number;
+  goal?: number;
   collected: number;
   donors: number;
   daysLeft: number;
@@ -21,13 +22,15 @@ export function CampaignCard({
   image,
   location,
   target,
+  goal,
   collected,
   donors,
   daysLeft,
   category,
   onClick
 }: CampaignCardProps) {
-  const percentage = Math.min((collected / target) * 100, 100);
+  const effectiveTarget = target > 0 ? target : (goal ?? 0);
+  const percentage = effectiveTarget > 0 ? Math.min((collected / effectiveTarget) * 100, 100) : 0;
 
   return (
     <div
@@ -84,7 +87,7 @@ export function CampaignCard({
               Rp {collected.toLocaleString('id-ID')}
             </p>
             <p className="text-xs text-gray-500">
-              dari Rp {target.toLocaleString('id-ID')}
+              dari Rp {(effectiveTarget).toLocaleString('id-ID')}
             </p>
           </div>
           <div className="flex items-center gap-1 text-gray-600 text-sm">

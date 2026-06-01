@@ -24,6 +24,7 @@ type Campaign = {
   description: string;
   location: string;
   target: number;
+  goal?: number;
   collected: number;
   donors: number;
   daysLeft: number;
@@ -182,7 +183,9 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
   }, []);
 
   const normalizedCampaigns = campaigns.map((campaign) => {
-    const normalizedTarget = Math.max(0, toSafeNumber(campaign.target, 0));
+    const rawTarget = Math.max(0, toSafeNumber(campaign.target, 0));
+    const rawGoal = Math.max(0, toSafeNumber((campaign as any).goal, 0));
+    const normalizedTarget = Math.max(0, rawTarget > 0 ? rawTarget : rawGoal);
     const normalizedCollected = Math.max(0, toSafeNumber(campaign.collected, 0));
     const normalizedDonors = Math.max(0, toSafeNumber(campaign.donors, 0));
     const normalizedStatus = campaign.id <= 6
@@ -196,6 +199,7 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
       location: cleanDisplayText(campaign.location),
       organizer: cleanDisplayText(campaign.organizer),
       category: cleanDisplayText(campaign.category),
+      goal: rawGoal,
       target: normalizedTarget,
       collected: normalizedCollected,
       donors: normalizedDonors,
@@ -554,7 +558,8 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
                 </div>
               ) : (
                 pendingCampaigns.map((campaign) => {
-                  const progress = campaign.target > 0 ? Math.min((campaign.collected / campaign.target) * 100, 100) : 0;
+                  const effectiveTarget = campaign.target > 0 ? campaign.target : (campaign.goal ?? 0);
+                  const progress = effectiveTarget > 0 ? Math.min((campaign.collected / effectiveTarget) * 100, 100) : 0;
                   return (
                     <div key={campaign.id} className="rounded-2xl border border-slate-700 bg-slate-700/30 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
@@ -727,7 +732,8 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
                   </thead>
                   <tbody>
                     {paginatedCampaigns.map((campaign) => {
-                      const progress = campaign.target > 0 ? Math.min((campaign.collected / campaign.target) * 100, 100) : 0;
+                      const effectiveTarget = campaign.target > 0 ? campaign.target : (campaign.goal ?? 0);
+                      const progress = effectiveTarget > 0 ? Math.min((campaign.collected / effectiveTarget) * 100, 100) : 0;
                       const isPending = campaign.status === 'pending';
                       const isRejected = campaign.status === 'rejected';
 

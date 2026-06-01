@@ -47,6 +47,7 @@ type CampaignRecord = {
   image: string;
   location: string;
   target: number;
+  goal?: number;
   collected: number;
   donors: number;
   daysLeft: number;
@@ -328,6 +329,7 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   category: toSafeText(campaign.category),
   organizer: toSafeText(campaign.organizer),
   creatorEmail: toSafeText(campaign.creatorEmail),
+  goal: rawGoal,
   target: normalizedTarget,
   collected: Math.max(0, toSafeNumber(campaign.collected, 0)),
   donors: Math.max(0, toSafeNumber(campaign.donors, 0)),
@@ -1542,7 +1544,15 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   useEffect(() => {
     setCurrentPage(1);
     setCampaignListFadeOut(false);
-  }, [selectedCategory, sortBy, campaigns]);
+  }, [selectedCategory, sortBy]);
+
+  useEffect(() => {
+    if (currentPage <= totalPages) {
+      return;
+    }
+
+    setCurrentPage(totalPages);
+  }, [totalPages, currentPage]);
 
   useEffect(() => () => {
     if (campaignPageTransitionTimerRef.current) {

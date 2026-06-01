@@ -155,7 +155,8 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   const [editError, setEditError] = useState('');
   const [editTitle, setEditTitle] = useState(campaign.title);
   const [editLocation, setEditLocation] = useState(campaign.location);
-  const [editTarget, setEditTarget] = useState(String(campaign.target));
+  const effectiveTarget = campaign.target > 0 ? campaign.target : (campaign.goal ?? 0);
+  const [editTarget, setEditTarget] = useState(String(effectiveTarget));
   const [editDaysLeft, setEditDaysLeft] = useState(String(campaign.daysLeft));
   const [editStory, setEditStory] = useState(campaign.story);
   const [editImage, setEditImage] = useState(campaign.image);
@@ -217,7 +218,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   const [fetchedDonations, setFetchedDonations] = useState<Array<{name: string; amount: number; message: string; timestamp: number}> | null>(null);
   const [loadingDonations, setLoadingDonations] = useState(false);
 
-  const percentage = Math.min((campaign.collected / campaign.target) * 100, 100);
+  const percentage = effectiveTarget > 0 ? Math.min((campaign.collected / effectiveTarget) * 100, 100) : 0;
   const canEdit = user?.email && campaign.creatorEmail && user.email.toLowerCase() === campaign.creatorEmail.toLowerCase();
   const isVerified = campaign.status !== 'pending' && campaign.status !== 'rejected';
   const statusLabel = campaign.status === 'pending'
@@ -876,7 +877,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                     Rp {campaign.collected.toLocaleString('id-ID')}
                   </p>
                   <p className="text-gray-600">
-                    dari target Rp {campaign.target.toLocaleString('id-ID')}
+                    dari target Rp {effectiveTarget.toLocaleString('id-ID')}
                   </p>
                 </div>
               </div>
