@@ -1979,9 +1979,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
               setRejectUndoState(null);
               try {
                 await updateCampaignStatusOnServer(campaignId, 'verified');
-                setCampaigns((prev) => prev.map((campaign) => (
-                  campaign.id === campaignId ? { ...campaign, status: 'verified' } : campaign
-                )));
+                await syncCampaignsFromServer();
               } catch (err) {
                 console.error(err);
                 window.alert('Gagal memverifikasi kampanye. Coba lagi.');
@@ -1993,10 +1991,8 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
             void (async () => {
               try {
                 await updateCampaignStatusOnServer(campaignId, 'rejected');
-                setCampaigns((prev) => prev.map((campaign) => (
-                  campaign.id === campaignId ? { ...campaign, status: 'rejected' } : campaign
-                )));
                 startRejectUndo(campaignId, previousStatus);
+                await syncCampaignsFromServer();
               } catch (err) {
                 console.error(err);
                 window.alert('Gagal menolak kampanye. Coba lagi.');
