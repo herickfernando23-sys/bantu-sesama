@@ -554,6 +554,7 @@ export default function App() {
   const deletedUserUndoTimeoutRef = useRef<number | null>(null);
   const campaignPageTransitionTimerRef = useRef<number | null>(null);
   const campaignListTopRef = useRef<HTMLDivElement | null>(null);
+  const syncCampaignsInFlightRef = useRef(false);
 
   const campaignStorageKey = 'bantusesama-campaigns';
   const campaignUpdatedEventKey = 'bantusesama-campaigns-updated';
@@ -607,6 +608,11 @@ export default function App() {
     cancelledRef?: { current: boolean },
     extraHiddenDemoCampaignIds: number[] = []
   ): Promise<boolean> => {
+    if (syncCampaignsInFlightRef.current) {
+      return false;
+    }
+
+    syncCampaignsInFlightRef.current = true;
     try {
       const response = await fetch(apiUrl(`/api/campaigns?_=${Date.now()}`), { cache: 'no-store' });
       if ((cancelledRef?.current ?? false) || !response.ok) {
@@ -645,6 +651,8 @@ export default function App() {
       return true;
     } catch (err) {
       return false;
+    } finally {
+      syncCampaignsInFlightRef.current = false;
     }
   };
 
@@ -672,10 +680,18 @@ export default function App() {
       }
 
       try {
-        if (typeof campaign.image === 'string' && campaign.image.startsWith('http')) {
-          const parsed = new URL(campaign.image);
-          if (!campaign.image.startsWith(`${apiBase}/image-proxy`) && parsed.hostname !== window.location.hostname) {
-            return { ...campaign, image: `${apiBase}/image-proxy?url=${encodeURIComponent(campaign.image)}` };
+        if (typeof campaign.image === 'string') {
+          if (campaign.image.startsWith('/')) {
+            if (apiBase) {
+              return { ...campaign, image: `${apiBase}${campaign.image}` };
+            }
+          }
+
+          if (campaign.image.startsWith('http')) {
+            const parsed = new URL(campaign.image);
+            if (apiBase && !campaign.image.startsWith(`${apiBase}/image-proxy`) && parsed.hostname !== window.location.hostname) {
+              return { ...campaign, image: `${apiBase}/image-proxy?url=${encodeURIComponent(campaign.image)}` };
+            }
           }
         }
       } catch (err) {
