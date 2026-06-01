@@ -312,8 +312,9 @@ const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
 };
 
 const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
-  const rawGoal = (campaign as CampaignRecord & { goal?: number | string }).goal;
-  const normalizedTarget = Math.max(0, toSafeNumber(campaign.target ?? rawGoal, 0));
+  const rawTarget = toSafeNumber((campaign as CampaignRecord & { target?: number | string }).target, 0);
+  const rawGoal = toSafeNumber((campaign as CampaignRecord & { goal?: number | string }).goal, 0);
+  const normalizedTarget = Math.max(0, rawTarget > 0 ? rawTarget : rawGoal);
 
   return ({
   ...migrateLegacyCampaignId(campaign),
@@ -1094,6 +1095,18 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       return !(isLegacyMockId && isLegacyMockTitle && hasNoCreator);
     }));
   }, [campaignsHydrated]);
+
+  useEffect(() => {
+    if (!campaignsHydrated) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(campaignStorageKey, JSON.stringify(campaigns));
+    } catch {
+      // ignore write failures in environments where localStorage is unavailable
+    }
+  }, [campaigns, campaignsHydrated]);
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
@@ -1951,24 +1964,34 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           withdrawalRequests={withdrawalRequests}
           user={adminUser}
           onVerifyCampaign={(campaignId) => {
-            clearRejectUndoTimer();
-            setRejectUndoState(null);
-            void updateCampaignStatusOnServer(campaignId, 'verified').catch((err) => {
-              console.error(err);
-            });
-            setCampaigns((prev) => prev.map((campaign) => (
-              campaign.id === campaignId ? { ...campaign, status: 'verified' } : campaign
-            )));
+            void (async () => {
+              clearRejectUndoTimer();
+              setRejectUndoState(null);
+              try {
+                await updateCampaignStatusOnServer(campaignId, 'verified');
+                setCampaigns((prev) => prev.map((campaign) => (
+                  campaign.id === campaignId ? { ...campaign, status: 'verified' } : campaign
+                )));
+              } catch (err) {
+                console.error(err);
+                window.alert('Gagal memverifikasi kampanye. Coba lagi.');
+              }
+            })();
           }}
           onRejectCampaign={(campaignId) => {
             const previousStatus = campaigns.find((campaign) => campaign.id === campaignId)?.status;
-            void updateCampaignStatusOnServer(campaignId, 'rejected').catch((err) => {
-              console.error(err);
-            });
-            setCampaigns((prev) => prev.map((campaign) => (
-              campaign.id === campaignId ? { ...campaign, status: 'rejected' } : campaign
-            )));
-            startRejectUndo(campaignId, previousStatus);
+            void (async () => {
+              try {
+                await updateCampaignStatusOnServer(campaignId, 'rejected');
+                setCampaigns((prev) => prev.map((campaign) => (
+                  campaign.id === campaignId ? { ...campaign, status: 'rejected' } : campaign
+                )));
+                startRejectUndo(campaignId, previousStatus);
+              } catch (err) {
+                console.error(err);
+                window.alert('Gagal menolak kampanye. Coba lagi.');
+              }
+            })();
           }}
           onUpdateWithdrawalStatus={updateWithdrawalRequestStatus}
           onClearWithdrawals={clearProcessedWithdrawals}
