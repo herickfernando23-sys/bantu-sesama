@@ -121,6 +121,11 @@ const pendingPaymentsKey = 'bantusesama-pending-payments';
 const userSessionKey = 'bantusesama-user-session';
 const recurringDonationsKey = 'bantusesama-recurring-donors';
 const toSafeText = (value: unknown) => String(value ?? '').trim();
+const toSafeNumber = (value: unknown, fallback = 0) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+};
+const stripMarkdownHeading = (value: unknown) => toSafeText(value).replace(/^\s*#{1,6}\s*/gm, '').replace(/\s+/g, ' ').trim();
 const legacyCampaignIdMap: Record<number, number> = {
   1001: 7,
   1002: 8,
@@ -138,6 +143,15 @@ const campaignImageOverrides: Record<number, string> = {
   11: 'https://images.unsplash.com/photo-1533900298318-6b8da08a523e?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
   12: 'https://images.unsplash.com/photo-1597129778410-0e4932adbd77?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'
 };
+
+const legacyPaginationMockTitles = new Set([
+  'Baksop Ibu Lina Butuh Modal Baru',
+  'Warung Nasi Pak Eko Perlu Perbaikan',
+  'Tukang Jahit Bu Titin Kembali Beroperasi',
+  'Pedagang Kaki Lima Butuh Gerobak Baru',
+  'Ibu Rani Butuh Modal untuk Toko Kelontong',
+  'Koperasi UKM Butuh Dana Operasional'
+]);
 
 const loadRegisteredUsersFromStorage = () => {
   if (typeof window === 'undefined') {
@@ -275,8 +289,8 @@ const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
 const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => ({
   ...migrateLegacyCampaignId(campaign),
   createdAt: campaign.createdAt ?? Date.now(),
-  title: toSafeText(campaign.title),
-  description: toSafeText(campaign.description),
+  title: stripMarkdownHeading(campaign.title),
+  description: stripMarkdownHeading(campaign.description),
   fullDescription: toSafeText(campaign.fullDescription || campaign.story || campaign.description),
   story: toSafeText(campaign.story || campaign.fullDescription || campaign.description),
   image: campaign.image || '',
@@ -284,6 +298,13 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => ({
   category: toSafeText(campaign.category),
   organizer: toSafeText(campaign.organizer),
   creatorEmail: toSafeText(campaign.creatorEmail),
+  target: Math.max(0, toSafeNumber(campaign.target, 0)),
+  collected: Math.max(0, toSafeNumber(campaign.collected, 0)),
+  donors: Math.max(0, toSafeNumber(campaign.donors, 0)),
+  daysLeft: Math.max(0, toSafeNumber(campaign.daysLeft, 0)),
+  status: campaign.id <= 6
+    ? (campaign.status === 'rejected' ? 'rejected' : 'verified')
+    : (campaign.status ?? 'pending'),
   fundAllocation: Array.isArray(campaign.fundAllocation) ? campaign.fundAllocation : [],
   disbursementHistory: Array.isArray(campaign.disbursementHistory) ? campaign.disbursementHistory : [],
   donations: Array.isArray(campaign.donations) ? campaign.donations : []
@@ -902,141 +923,6 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
   ]);
 
-  // Append additional mock campaigns for testing pagination (only if not already present)
-  useEffect(() => {
-    if (!campaignsHydrated) return; // wait until stored campaigns are loaded
-    const apiBase = getApiBaseUrl();
-    const extraMockCampaigns: CampaignRecord[] = [
-      {
-        id: 7,
-        // make these mock campaigns older so they do not appear on page 1 (keep real campaigns first)
-        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 3,
-        title: 'Baksop Ibu Lina Butuh Modal Baru',
-        description: 'Baksop kecil membutuhkan modal untuk membeli peralatan baru setelah kebakaran.',
-        fullDescription: 'Baksop Ibu Lina adalah usaha rumahan membutuhkan modal untuk pengganti peralatan.',
-        story: 'Baksop Ibu Lina adalah usaha rumahan. Bantuan digunakan untuk mengganti peralatan yang hilang.',
-        status: 'verified',
-        image: 'https://images.unsplash.com/photo-1545731782-7ce02675a3e1?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHxwYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-        location: 'Bandung',
-        target: 8000000,
-        collected: 1200000,
-        donors: 12,
-        daysLeft: 20,
-        category: 'UMKM Terdampak Bencana',
-        organizer: 'Komunitas Lokal',
-        donations: [],
-        fundAllocation: [],
-        disbursementHistory: []
-      },
-      {
-        id: 8,
-        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 2,
-        title: 'Warung Nasi Pak Eko Perlu Perbaikan',
-        description: 'Atap warung rusak, butuh perbaikan untuk kembali berjualan.',
-        fullDescription: 'Warung Nasi Pak Eko membutuhkan perbaikan atap dan peralatan.',
-        story: 'Warung Nasi Pak Eko membutuhkan perbaikan atap dan peralatan agar dapat kembali berjualan.',
-        status: 'verified',
-        image: campaignImageOverrides[8],
-        location: 'Yogyakarta',
-        target: 6000000,
-        collected: 2500000,
-        donors: 34,
-        daysLeft: 12,
-        category: 'UMKM Terdampak Bencana',
-        organizer: 'Relawan Lokal',
-        donations: [],
-        fundAllocation: [],
-        disbursementHistory: []
-      },
-      {
-        id: 9,
-        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 2,
-        title: 'Tukang Jahit Bu Titin Kembali Beroperasi',
-        description: 'Mesin jahit lama butuh penggantian agar pesanan dapat kembali berjalan.',
-        fullDescription: 'Mesin jahit Bu Titin mengalami kerusakan serius, perlu diganti.',
-        story: 'Mesin jahit Bu Titin rusak dan butuh penggantian agar usaha bisa berjalan lagi.',
-        status: 'verified',
-        image: campaignImageOverrides[9],
-        location: 'Surabaya',
-        target: 4000000,
-        collected: 1800000,
-        donors: 8,
-        daysLeft: 30,
-        category: 'UMKM Terdampak Bencana',
-        organizer: 'Komunitas Penjahit',
-        donations: [],
-        fundAllocation: [],
-        disbursementHistory: []
-      },
-      {
-        id: 10,
-        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 1,
-        title: 'Pedagang Kaki Lima Butuh Gerobak Baru',
-        description: 'Komunitas PKL ingin membeli gerobak bersama agar bisa berdagang lagi.',
-        fullDescription: 'Dukungan untuk membeli gerobak dan peralatan agar usaha kembali berjalan.',
-        story: 'Komunitas PKL membutuhkan gerobak baru agar bisa berjualan kembali.',
-        status: 'verified',
-        image: campaignImageOverrides[10],
-        location: 'Medan',
-        target: 7000000,
-        collected: 3500000,
-        donors: 27,
-        daysLeft: 18,
-        category: 'UMKM Terdampak Bencana',
-        organizer: 'Paguyuban PKL',
-        donations: [],
-        fundAllocation: [],
-        disbursementHistory: []
-      },
-      {
-        id: 11,
-        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 1,
-        title: 'Ibu Rani Butuh Modal untuk Toko Kelontong',
-        description: 'Toko kelontong perlu tambahan modal untuk restock barang.',
-        fullDescription: 'Modal tambahan untuk membeli stok barang dan pembayaran sewa.',
-        story: 'Toko kelontong memerlukan modal untuk restock dan menutup biaya sewa.',
-        status: 'verified',
-        image: campaignImageOverrides[11],
-        location: 'Semarang',
-        target: 5000000,
-        collected: 900000,
-        donors: 5,
-        daysLeft: 40,
-        category: 'UMKM Terdampak Bencana',
-        organizer: 'RT setempat',
-        donations: [],
-        fundAllocation: [],
-        disbursementHistory: []
-      },
-      {
-        id: 12,
-        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 4,
-        title: 'Koperasi UKM Butuh Dana Operasional',
-        description: 'Koperasi butuh tambahan dana untuk program pelatihan dan modal kerja.',
-        fullDescription: 'Dukungan untuk program pelatihan dan modal usaha kecil.',
-        story: 'Koperasi lokal butuh dana operasional untuk program pelatihan dan pendanaan.',
-        status: 'verified',
-        image: campaignImageOverrides[12],
-        location: 'Bali',
-        target: 20000000,
-        collected: 4000000,
-        donors: 18,
-        daysLeft: 50,
-        category: 'UMKM Terdampak Bencana',
-        organizer: 'Koperasi Lokal',
-        donations: [],
-        fundAllocation: [],
-        disbursementHistory: []
-      }
-    ];
-
-    setCampaigns(prev => {
-      // Avoid duplicate insertion on HMR or re-mount
-      if (prev.some(c => c.id === 7)) return prev;
-      return [...prev, ...extraMockCampaigns];
-    });
-  }, [campaignsHydrated]);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -1151,6 +1037,19 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       return prev.map(normalizeCampaignRecord);
     });
   }, []);
+
+  useEffect(() => {
+    if (!campaignsHydrated) {
+      return;
+    }
+
+    setCampaigns((prev) => prev.filter((campaign) => {
+      const isLegacyMockId = campaign.id >= 7 && campaign.id <= 12;
+      const isLegacyMockTitle = legacyPaginationMockTitles.has(toSafeText(campaign.title));
+      const hasNoCreator = !toSafeText(campaign.creatorEmail);
+      return !(isLegacyMockId && isLegacyMockTitle && hasNoCreator);
+    }));
+  }, [campaignsHydrated]);
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {

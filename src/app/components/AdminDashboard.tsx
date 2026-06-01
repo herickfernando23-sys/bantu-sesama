@@ -54,6 +54,13 @@ type AdminUser = {
   campaignCount: number;
 };
 
+const toSafeNumber = (value: unknown, fallback = 0) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+};
+
+const cleanDisplayText = (value: unknown) => String(value ?? '').replace(/^\s*#{1,6}\s*/gm, '').replace(/\s+/g, ' ').trim();
+
 interface AdminDashboardProps {
   campaigns: Campaign[];
   users: AdminUser[];
@@ -174,7 +181,29 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
     }
   }, []);
 
-  const sortedCampaigns = [...campaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
+  const normalizedCampaigns = campaigns.map((campaign) => {
+    const normalizedTarget = Math.max(0, toSafeNumber(campaign.target, 0));
+    const normalizedCollected = Math.max(0, toSafeNumber(campaign.collected, 0));
+    const normalizedDonors = Math.max(0, toSafeNumber(campaign.donors, 0));
+    const normalizedStatus = campaign.id <= 6
+      ? (campaign.status === 'rejected' ? 'rejected' : 'verified')
+      : (campaign.status ?? 'pending');
+
+    return {
+      ...campaign,
+      title: cleanDisplayText(campaign.title),
+      description: cleanDisplayText(campaign.description),
+      location: cleanDisplayText(campaign.location),
+      organizer: cleanDisplayText(campaign.organizer),
+      category: cleanDisplayText(campaign.category),
+      target: normalizedTarget,
+      collected: normalizedCollected,
+      donors: normalizedDonors,
+      status: normalizedStatus,
+    };
+  });
+
+  const sortedCampaigns = [...normalizedCampaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
   const totalCampaignPages = Math.max(1, Math.ceil(sortedCampaigns.length / PAGE_SIZE));
   const paginatedCampaigns = sortedCampaigns.slice((campaignPage - 1) * PAGE_SIZE, campaignPage * PAGE_SIZE);
 
@@ -195,19 +224,19 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
     }, 220);
   };
 
-  const totalRaised = campaigns.reduce((sum, campaign) => sum + campaign.collected, 0);
-  const totalTarget = campaigns.reduce((sum, campaign) => sum + campaign.target, 0);
-  const totalDonors = campaigns.reduce((sum, campaign) => sum + campaign.donors, 0);
+  const totalRaised = normalizedCampaigns.reduce((sum, campaign) => sum + campaign.collected, 0);
+  const totalTarget = normalizedCampaigns.reduce((sum, campaign) => sum + campaign.target, 0);
+  const totalDonors = normalizedCampaigns.reduce((sum, campaign) => sum + campaign.donors, 0);
   const avgProgress = totalTarget > 0 ? (totalRaised / totalTarget) * 100 : 0;
 
-  const pendingCampaigns = campaigns.filter((campaign) => campaign.status === 'pending');
-  const rejectedCampaigns = campaigns.filter((campaign) => campaign.status === 'rejected');
-  const verifiedCampaigns = campaigns.filter((campaign) => campaign.status !== 'pending' && campaign.status !== 'rejected');
+  const pendingCampaigns = normalizedCampaigns.filter((campaign) => campaign.status === 'pending');
+  const rejectedCampaigns = normalizedCampaigns.filter((campaign) => campaign.status === 'rejected');
+  const verifiedCampaigns = normalizedCampaigns.filter((campaign) => campaign.status !== 'pending' && campaign.status !== 'rejected');
 
   const stats = [
     {
       label: 'Total Kampanye',
-      value: campaigns.length.toString(),
+      value: normalizedCampaigns.length.toString(),
       icon: HeartHandshake,
       tone: 'bg-blue-900/20 text-blue-200',
     },
@@ -525,7 +554,7 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
                 </div>
               ) : (
                 pendingCampaigns.map((campaign) => {
-                  const progress = Math.min((campaign.collected / campaign.target) * 100, 100);
+                  const progress = campaign.target > 0 ? Math.min((campaign.collected / campaign.target) * 100, 100) : 0;
                   return (
                     <div key={campaign.id} className="rounded-2xl border border-slate-700 bg-slate-700/30 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
@@ -698,7 +727,7 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
                   </thead>
                   <tbody>
                     {paginatedCampaigns.map((campaign) => {
-                      const progress = Math.min((campaign.collected / campaign.target) * 100, 100);
+                      const progress = campaign.target > 0 ? Math.min((campaign.collected / campaign.target) * 100, 100) : 0;
                       const isPending = campaign.status === 'pending';
                       const isRejected = campaign.status === 'rejected';
 
