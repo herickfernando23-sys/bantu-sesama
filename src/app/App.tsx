@@ -2206,21 +2206,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                 }
               } catch (err) {
                 console.error('Error menolak kampanye:', err);
-                
-                // Restore campaign to state if rejection failed
-                if (previousCampaign) {
-                  setCampaigns((prev) => [...prev, previousCampaign]);
-                  try {
-                    const restored = [...(JSON.parse(window.localStorage.getItem(campaignStorageKey) || '[]') || []), previousCampaign];
-                    window.localStorage.setItem(campaignStorageKey, JSON.stringify(restored));
-                  } catch {
-                    // ignore write failures
-                  }
-                }
-                
-                // Remove from hidden rejected list if restore happens
-                setHiddenRejectedCampaignIds((prev) => prev.filter((id) => id !== campaignId));
-                window.alert('Gagal menolak kampanye. Kampanye telah dikembalikan. Silakan coba lagi.');
+                window.alert('Kampanye ditolak secara lokal, tetapi sinkronisasi server gagal. Silakan coba lagi nanti untuk memperbarui status di server.');
               }
             })();
           }}
