@@ -84,13 +84,31 @@ export function TipWidget({ user }: { user?: { name?: string; email?: string } |
       }
       const data = await resp.json();
 
-      // If Midtrans client key is not configured or Snap unavailable, fallback: mark tip succeeded on server
-      if (!midtransClientKey) {
+      const isDemoTransaction = Boolean(data.demoMode) || !midtransClientKey || String(data.transactionToken || '').startsWith('DEMO_');
+
+      if (isDemoTransaction) {
         try {
-          await fetch(apiUrl('/api/payments/confirm'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipId: data.tipId, orderId: data.orderId, transactionStatus: 'settlement' }) });
+          const confirmResp = await fetch(apiUrl('/api/payments/confirm'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tipId: data.tipId,
+              orderId: data.orderId,
+              transactionStatus: 'settlement'
+            })
+          });
+
+          if (!confirmResp.ok) {
+            const text = await confirmResp.text().catch(() => null);
+            let body = {} as any;
+            try { body = text ? JSON.parse(text) : {}; } catch (e) { body = {}; }
+            const serverMsg = (body && body.error) || text || 'Gagal mencatat tip di server';
+            throw new Error(serverMsg);
+          }
+
           setSuccess(`Terima kasih! Tips Rp ${numeric.toLocaleString('id-ID')} berhasil tercatat.`);
         } catch (err) {
-          setError('Gagal mencatat tip di server');
+          setError(err instanceof Error ? err.message : 'Gagal mencatat tip di server');
         }
         return;
       }
