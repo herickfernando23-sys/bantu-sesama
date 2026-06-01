@@ -279,8 +279,8 @@ const migrateLegacyCampaignId = (campaign: CampaignRecord): CampaignRecord => {
 
 const campaignStatusRank: Record<CampaignStatus, number> = {
   verified: 3,
-  pending: 2,
-  rejected: 1
+  rejected: 2,
+  pending: 1
 };
 
 const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
@@ -530,20 +530,16 @@ export default function App() {
         return;
       }
 
-      const remoteCampaigns = list.map(normalizeCampaignRecord);
+      const remoteCampaigns = normalizeCampaignsForDisplay(list.map(normalizeCampaignRecord), getApiBaseUrl());
 
       if (cancelledRef?.current) {
         return;
       }
 
-      setCampaigns((currentCampaigns) => {
-        const mergedCampaigns = normalizeCampaignsForDisplay([
-          ...currentCampaigns,
-          ...remoteCampaigns
-        ], getApiBaseUrl());
-        window.localStorage.setItem(campaignStorageKey, JSON.stringify(mergedCampaigns));
-        return mergedCampaigns;
-      });
+      // Server-side campaign list should be authoritative for public listings.
+      // This removes campaigns that were rejected, deleted, or filtered out on the backend.
+      setCampaigns(remoteCampaigns);
+      window.localStorage.setItem(campaignStorageKey, JSON.stringify(remoteCampaigns));
     } catch (err) {
       // Keep local data when the backend is unreachable.
     }
@@ -1007,7 +1003,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     let cancelled = false;
 
     (async () => {
-      const shouldSyncUsersToBackend = import.meta.env.DEV && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+      const shouldSyncUsersToBackend = (typeof import.meta !== 'undefined' && typeof (import.meta as any).env !== 'undefined' && (import.meta as any).env.DEV) && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
       if (shouldSyncUsersToBackend) {
         const storedUsers = loadRegisteredUsersFromStorage();
         storedUsers.forEach((storedUser) => {
@@ -1053,12 +1049,19 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       void syncCampaignsFromServer();
     };
 
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void syncCampaignsFromServer();
+      }
+    }, 60000);
+
     window.addEventListener('focus', handleFocusSync);
     document.addEventListener('visibilitychange', handleVisibilitySync);
 
     return () => {
       window.removeEventListener('focus', handleFocusSync);
       document.removeEventListener('visibilitychange', handleVisibilitySync);
+      window.clearInterval(intervalId);
     };
   }, []);
 
