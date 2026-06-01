@@ -630,10 +630,6 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
                   <span className="text-slate-100 font-medium">{pendingCampaigns.length}</span>
                 </div>
                 <div className="flex items-center justify-between text-sm text-slate-400">
-                  <span>Kampanye ditolak</span>
-                  <span className="text-slate-100 font-medium">{rejectedCampaigns.length}</span>
-                </div>
-                <div className="flex items-center justify-between text-sm text-slate-400">
                   <span>Status platform</span>
                   <Badge variant="secondary" className="bg-emerald-900/30 text-emerald-200 border-emerald-700">
                     Stabil

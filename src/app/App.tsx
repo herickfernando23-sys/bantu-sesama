@@ -1122,7 +1122,8 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       const localCampaigns = storedCampaigns !== null
         ? normalizeCampaignsForDisplay(storedCampaigns, getApiBaseUrl())
           .filter((campaign) => (
-            !hiddenDemoCampaignIds.includes(campaign.id)
+            campaign.status !== 'rejected'
+            && !hiddenDemoCampaignIds.includes(campaign.id)
             && !hiddenRejectedCampaignIds.includes(campaign.id)
           ))
         : null;
@@ -1172,6 +1173,13 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       window.clearInterval(intervalId);
     };
   }, []);
+
+  // Sync campaigns from server when entering admin page
+  useEffect(() => {
+    if (page === 'admin' && adminUser) {
+      void syncCampaignsFromServer();
+    }
+  }, [page, adminUser]);
 
   useEffect(() => {
     setCampaigns((prev) => {
@@ -1876,6 +1884,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           setAdminUser(admin);
           window.localStorage.setItem(adminSessionKey, JSON.stringify(admin));
           navigatePage('admin');
+          void syncCampaignsFromServer();
         }}
       />
     );
@@ -2157,15 +2166,36 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                 // Wait briefly to ensure server updated status before syncing
                 await new Promise(resolve => window.setTimeout(resolve, 200));
                 
-                await syncCampaignsFromServer(undefined, nextHiddenDemoIds, nextHiddenRejectedIds);
+                const syncSuccess = await syncCampaignsFromServer(undefined, nextHiddenDemoIds, nextHiddenRejectedIds);
+                
+                if (!syncSuccess) {
+                  console.warn('Sync dari server gagal, mencoba sync ulang...');
+                  await new Promise(resolve => window.setTimeout(resolve, 500));
+                  await syncCampaignsFromServer(undefined, nextHiddenDemoIds, nextHiddenRejectedIds);
+                }
+                
                 try {
                   window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
                 } catch {
                   // ignore write failures
                 }
               } catch (err) {
-                console.error(err);
-                window.alert('Gagal menolak kampanye. Coba lagi.');
+                console.error('Error menolak kampanye:', err);
+                
+                // Restore campaign to state if rejection failed
+                if (previousCampaign) {
+                  setCampaigns((prev) => [...prev, previousCampaign]);
+                  try {
+                    const restored = [...(JSON.parse(window.localStorage.getItem(campaignStorageKey) || '[]') || []), previousCampaign];
+                    window.localStorage.setItem(campaignStorageKey, JSON.stringify(restored));
+                  } catch {
+                    // ignore write failures
+                  }
+                }
+                
+                // Remove from hidden rejected list if restore happens
+                setHiddenRejectedCampaignIds((prev) => prev.filter((id) => id !== campaignId));
+                window.alert('Gagal menolak kampanye. Kampanye telah dikembalikan. Silakan coba lagi.');
               }
             })();
           }}
