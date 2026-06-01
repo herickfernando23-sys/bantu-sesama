@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Mail, Lock, User } from 'lucide-react';
+import { apiUrl } from '../lib/apiBaseUrl';
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const registeredUsersKey = 'bantusesama-registered-users';
@@ -58,6 +59,60 @@ export function LoginRegister({ onLogin }: LoginRegisterProps) {
     confirmPassword: ''
   });
 
+  const syncLocalUser = (user: StoredUser) => {
+    const existing = getStoredUsers();
+    if (!existing.some((item) => item.email.toLowerCase() === user.email.toLowerCase())) {
+      saveStoredUsers([...existing, user]);
+    }
+  };
+
+  const loginWithServer = async (email: string, password: string) => {
+    const response = await fetch(apiUrl('/api/auth/login'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || body.error || 'Login gagal');
+    }
+
+    return response.json() as Promise<{ token: string; user: { name: string; email: string } }>;
+  };
+
+  const registerWithServer = async (name: string, email: string, password: string) => {
+    const response = await fetch(apiUrl('/api/auth/register'), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.message || body.error || 'Registrasi gagal');
+    }
+
+    return response.json() as Promise<{ token: string; user: { name: string; email: string } }>;
+  };
+
+  const migrateUserToServer = async (user: StoredUser) => {
+    try {
+      const result = await registerWithServer(user.name, user.email, user.password);
+      window.localStorage.setItem('token', result.token);
+      window.localStorage.setItem('bantusesama-user-session', JSON.stringify(result.user));
+    } catch (err) {
+      // Ignore migration conflicts or when the backend is unavailable.
+    }
+  };
+
+  useEffect(() => {
+    const users = seedDemoUser();
+    users.forEach((user) => {
+      void migrateUserToServer(user);
+    });
+  }, []);
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({
@@ -91,15 +146,40 @@ export function LoginRegister({ onLogin }: LoginRegisterProps) {
         }
 
         if (!matchedUser || matchedUser.password !== formData.password) {
-          setError('Akun belum terdaftar atau password salah');
-          setLoading(false);
-          return;
+          try {
+            const serverLogin = await loginWithServer(email, formData.password);
+            window.localStorage.setItem('token', serverLogin.token);
+            window.localStorage.setItem('bantusesama-user-session', JSON.stringify(serverLogin.user));
+            onLogin({
+              name: serverLogin.user.name,
+              email: serverLogin.user.email
+            });
+            return;
+          } catch (serverErr) {
+            setError('Akun belum terdaftar atau password salah');
+            setLoading(false);
+            return;
+          }
         }
 
-        onLogin({
-          name: matchedUser.name,
-          email: matchedUser.email
-        });
+        try {
+          const serverLogin = await loginWithServer(email, formData.password);
+          window.localStorage.setItem('token', serverLogin.token);
+          window.localStorage.setItem('bantusesama-user-session', JSON.stringify(serverLogin.user));
+          syncLocalUser({ name: serverLogin.user.name, email: serverLogin.user.email, password: formData.password });
+          onLogin({
+            name: serverLogin.user.name,
+            email: serverLogin.user.email
+          });
+        } catch {
+          // Fallback untuk akun demo/lokal jika server sementara tidak tersedia.
+          syncLocalUser(matchedUser);
+          void migrateUserToServer(matchedUser);
+          onLogin({
+            name: matchedUser.name,
+            email: matchedUser.email
+          });
+        }
       } else {
         const email = formData.email.trim();
 
@@ -137,19 +217,35 @@ export function LoginRegister({ onLogin }: LoginRegisterProps) {
           return;
         }
 
-        saveStoredUsers([
-          ...users,
-          {
-            name: formData.name.trim(),
-            email,
+        try {
+          const serverAccount = await registerWithServer(formData.name.trim(), email, formData.password);
+          window.localStorage.setItem('token', serverAccount.token);
+          window.localStorage.setItem('bantusesama-user-session', JSON.stringify(serverAccount.user));
+          syncLocalUser({
+            name: serverAccount.user.name,
+            email: serverAccount.user.email,
             password: formData.password
-          }
-        ]);
+          });
+          onLogin({
+            name: serverAccount.user.name,
+            email: serverAccount.user.email
+          });
+        } catch (serverErr) {
+          // Fallback lokal agar mode demo masih jalan ketika backend tidak tersedia.
+          saveStoredUsers([
+            ...users,
+            {
+              name: formData.name.trim(),
+              email,
+              password: formData.password
+            }
+          ]);
 
-        onLogin({
-          name: formData.name.trim(),
-          email
-        });
+          onLogin({
+            name: formData.name.trim(),
+            email
+          });
+        }
       }
     } catch (err) {
       setError(isLogin ? 'Login gagal' : 'Registrasi gagal');

@@ -1776,7 +1776,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                         Anda adalah donatur rutin aktif untuk {recurringDonationStatus.campaignTitle}.
                       </p>
                       <p className="mt-2 text-xs text-emerald-600">
-                        Nominal bulanan: Rp {recurringDonationStatus.amount.toLocaleString('id-ID')}
+                        Nominal bulanan: Rp {Number(recurringDonationStatus.amount || 0).toLocaleString('id-ID')}
                       </p>
                         <div className="mt-3">
                           <button
