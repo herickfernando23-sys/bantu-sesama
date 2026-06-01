@@ -397,6 +397,7 @@ export default function App() {
     ? (persistedAdminUser ? 'admin' : 'admin-login')
     : null;
   const [selectedCampaign, setSelectedCampaign] = useState<number | null>(null);
+  const [selectedCampaignSource, setSelectedCampaignSource] = useState<'id' | 'snapshot'>('id');
   const selectedCampaignSnapshotRef = useRef<CampaignRecord | null>(null);
   const [selectedCategory, setSelectedCategory] = useState('Semua Kategori');
   const [sortBy, setSortBy] = useState('Terbaru');
@@ -490,6 +491,7 @@ export default function App() {
     }
 
     setSelectedCampaign(null);
+    setSelectedCampaignSource('id');
     // Push history first, then change page to ensure URL is available when component mounts
     window.history.pushState({ view: 'payment-continue' }, '', `/?${params.toString()}`);
     setPage('lanjut-pembayaran');
@@ -503,12 +505,14 @@ export default function App() {
 
       if (state?.view === 'campaign' && typeof state.campaignId === 'number') {
         setSelectedCampaign(state.campaignId);
+        setSelectedCampaignSource('id');
         setPage(null);
         return;
       }
 
       if (campaignIdFromUrl) {
         setSelectedCampaign(campaignIdFromUrl);
+        setSelectedCampaignSource('id');
         setPage(null);
         window.history.replaceState({ view: 'campaign', campaignId: campaignIdFromUrl }, '', `/?campaign=${campaignIdFromUrl}`);
         return;
@@ -516,12 +520,14 @@ export default function App() {
 
       if (paymentContinueFromUrl) {
         setSelectedCampaign(null);
+        setSelectedCampaignSource('id');
         setPage('lanjut-pembayaran');
         window.history.replaceState({ view: 'lanjut-pembayaran' }, '', `/?${window.location.search.replace(/^\?/, '')}`);
         return;
       }
 
       setSelectedCampaign(null);
+      setSelectedCampaignSource('id');
       setPage((state?.view as Page) ?? null);
     };
 
@@ -536,6 +542,7 @@ export default function App() {
 
     if (campaignIdFromUrl) {
       setSelectedCampaign(campaignIdFromUrl);
+      setSelectedCampaignSource('id');
       window.history.replaceState({ view: 'campaign', campaignId: campaignIdFromUrl }, '', `/?campaign=${campaignIdFromUrl}`);
     } else if (paymentContinueFromUrl) {
       window.history.replaceState({ view: 'lanjut-pembayaran' }, '', `/?${window.location.search.replace(/^\?/, '')}`);
@@ -549,6 +556,7 @@ export default function App() {
 
   const openCampaign = (campaignId: number) => {
     setSelectedCampaign(campaignId);
+    setSelectedCampaignSource('id');
     setPage(null);
     window.history.pushState(
       { view: 'campaign', campaignId },
@@ -564,10 +572,12 @@ export default function App() {
     }
 
     setSelectedCampaign(null);
+    setSelectedCampaignSource('id');
   };
 
   const goHome = () => {
     setSelectedCampaign(null);
+    setSelectedCampaignSource('id');
     setPage(null);
     window.history.pushState(
       { view: 'home' },
@@ -580,6 +590,7 @@ export default function App() {
     const resolvedPage = nextPage as Page;
 
     setSelectedCampaign(null);
+    setSelectedCampaignSource('id');
 
     setPage(resolvedPage);
     const nextPath = resolvedPage === 'admin' || resolvedPage === 'admin-login' ? '/admin' : '/';
@@ -1444,7 +1455,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
   }, [page]);
 
-  const selectedCampaignData = campaigns.find(c => c.id === selectedCampaign) ?? (selectedCampaignSnapshotRef.current?.id === selectedCampaign ? selectedCampaignSnapshotRef.current : null);
+  const selectedCampaignData = selectedCampaignSource === 'snapshot' && selectedCampaignSnapshotRef.current?.id === selectedCampaign
+    ? selectedCampaignSnapshotRef.current
+    : campaigns.find(c => c.id === selectedCampaign) ?? (selectedCampaignSnapshotRef.current?.id === selectedCampaign ? selectedCampaignSnapshotRef.current : null);
 
   useEffect(() => {
     if (selectedCampaignData) {
@@ -1640,6 +1653,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
               selectedCampaignSnapshotRef.current = normalizedCampaign;
               setCampaigns((prev) => [...prev, normalizedCampaign]);
               setSelectedCampaign(normalizedCampaign.id);
+              setSelectedCampaignSource('snapshot');
               setPage(null);
               window.history.pushState(
                 { view: 'campaign', campaignId: normalizedCampaign.id },
