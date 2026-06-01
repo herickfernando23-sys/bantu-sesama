@@ -326,6 +326,22 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
 });
 };
 
+const isRenderableCampaign = (campaign: CampaignRecord) => {
+  const title = toSafeText(campaign.title);
+  const description = toSafeText(campaign.description || campaign.fullDescription || campaign.story);
+  const location = toSafeText(campaign.location);
+  const organizer = toSafeText(campaign.organizer);
+  const target = Math.max(0, toSafeNumber(campaign.target, 0));
+
+  return (
+    title.length >= 4
+    && description.length >= 10
+    && location.length >= 2
+    && organizer.length >= 2
+    && target >= 100000
+  );
+};
+
 const infoPageContent: Record<InfoPageKey, { eyebrow: string; title: string; description: string; points: string[] }> = {
   'tentang-kami': {
     eyebrow: 'Tentang BantuSesama',
@@ -497,7 +513,8 @@ export default function App() {
       6: 'https://images.unsplash.com/photo-1767678233351-9308d8220fa5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw1fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080'
     };
 
-    return dedupeCampaigns(items).map((campaign) => {
+    return dedupeCampaigns(items)
+      .map((campaign) => {
       if (campaign && typeof campaign.id === 'number' && originalImagesFor1to6[campaign.id]) {
         return { ...campaign, image: originalImagesFor1to6[campaign.id] };
       }
@@ -517,8 +534,9 @@ export default function App() {
         // ignore malformed urls
       }
 
-      return campaign;
-    });
+        return campaign;
+      })
+      .filter(isRenderableCampaign);
   };
 
   const getCampaignIdFromUrl = () => {
@@ -1147,7 +1165,8 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   const campaignsSortedByTime = [...campaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
   const mockCampaigns = campaignsSortedByTime.filter((campaign) => campaign.id >= 1000);
   const realCampaigns = campaignsSortedByTime.filter((campaign) => campaign.id < 1000);
-  const campaignsForDisplay = [...mockCampaigns, ...realCampaigns];
+  const campaignsForDisplay = normalizeCampaignsForDisplay([...mockCampaigns, ...realCampaigns], getApiBaseUrl())
+    .filter((campaign) => campaign.status !== 'rejected');
 
   const donationHistoryForDisplay = campaignsForDisplay.flatMap((campaign) => {
     if (campaign.donations && campaign.donations.length > 0) {
@@ -1352,6 +1371,21 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
         }
       }
     };
+
+  const updateCampaignStatusOnServer = async (campaignId: number, status: CampaignStatus) => {
+    const response = await fetch(apiUrl(`/api/campaigns/${campaignId}/status`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || 'Gagal memperbarui status kampanye');
+    }
+
+    return response.json();
+  };
 
     const clearProcessedWithdrawals = () => {
       setWithdrawalRequests((prev) => prev.filter((r) => r.status !== 'Success' && r.status !== 'Rejected'));
@@ -1831,12 +1865,18 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           onVerifyCampaign={(campaignId) => {
             clearRejectUndoTimer();
             setRejectUndoState(null);
+            void updateCampaignStatusOnServer(campaignId, 'verified').catch((err) => {
+              console.error(err);
+            });
             setCampaigns((prev) => prev.map((campaign) => (
               campaign.id === campaignId ? { ...campaign, status: 'verified' } : campaign
             )));
           }}
           onRejectCampaign={(campaignId) => {
             const previousStatus = campaigns.find((campaign) => campaign.id === campaignId)?.status;
+            void updateCampaignStatusOnServer(campaignId, 'rejected').catch((err) => {
+              console.error(err);
+            });
             setCampaigns((prev) => prev.map((campaign) => (
               campaign.id === campaignId ? { ...campaign, status: 'rejected' } : campaign
             )));

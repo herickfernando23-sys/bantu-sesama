@@ -5,16 +5,14 @@ const optionalAuth = require('../middleware/optionalAuth');
 
 const toCleanText = (value) => String(value || '').replace(/^\s*#{1,6}\s*/gm, '').replace(/\s+/g, ' ').trim();
 
-const isLikelyPendingSpam = (campaign) => {
-  if (campaign.status !== 'pending') return false;
-
+const isLikelySpam = (campaign) => {
   const title = toCleanText(campaign.title);
   const description = toCleanText(campaign.description || campaign.fullDescription);
   const organizer = toCleanText(campaign.organizer);
   const location = toCleanText(campaign.location);
   const goal = Number(campaign.goal || 0);
 
-  // Hide obvious test/dummy pending records from admin/public listing.
+  // Hide obvious test/dummy records from admin/public listing.
   return (
     title.length < 4
     || description.length < 10
@@ -27,8 +25,31 @@ const isLikelyPendingSpam = (campaign) => {
 
 router.get('/', async (req, res) => {
   const campaigns = await Campaign.findAll({ include: [Category, User] });
-  const filteredCampaigns = campaigns.filter((campaign) => !isLikelyPendingSpam(campaign));
+  const filteredCampaigns = campaigns.filter((campaign) => campaign.status !== 'rejected' && !isLikelySpam(campaign));
   res.json(filteredCampaigns);
+});
+
+router.patch('/:id/status', async (req, res) => {
+  const campaignId = Number(req.params.id);
+  const nextStatus = String(req.body?.status || '').trim().toLowerCase();
+
+  if (!Number.isFinite(campaignId) || campaignId <= 0) {
+    return res.status(400).json({ error: 'campaign id tidak valid' });
+  }
+
+  if (!['verified', 'pending', 'rejected'].includes(nextStatus)) {
+    return res.status(400).json({ error: 'status tidak valid' });
+  }
+
+  const campaign = await Campaign.findByPk(campaignId);
+  if (!campaign) {
+    return res.status(404).json({ error: 'campaign not found' });
+  }
+
+  campaign.status = nextStatus;
+  await campaign.save();
+
+  res.json(campaign);
 });
 
 router.post('/', optionalAuth, async (req, res) => {

@@ -134,7 +134,7 @@ export function LoginRegister({ onLogin }: LoginRegisterProps) {
     try {
       if (isLogin) {
         const email = formData.email.trim();
-        const users = isLocalDev ? seedDemoUser() : [];
+        const users = isLocalDev ? seedDemoUser() : getStoredUsers();
         const matchedUser = users.find((user) => user.email.toLowerCase() === email.toLowerCase());
 
         // Login validation
@@ -162,13 +162,13 @@ export function LoginRegister({ onLogin }: LoginRegisterProps) {
             email: serverLogin.user.email
           });
         } catch {
-          if (!isLocalDev || !matchedUser || matchedUser.password !== formData.password) {
+          if (!matchedUser || matchedUser.password !== formData.password) {
             setError('Akun belum terdaftar di server atau password salah');
             setLoading(false);
             return;
           }
 
-          // Fallback akun demo/lokal hanya untuk localhost development.
+          // Fallback akun lokal yang sudah ada agar bisa dimigrasikan ke server.
           syncLocalUser(matchedUser);
           void migrateUserToServer(matchedUser);
           onLogin({
