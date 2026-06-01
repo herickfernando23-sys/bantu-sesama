@@ -1035,35 +1035,44 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
     (async () => {
       const storedCampaigns = loadCampaignsFromStorage() || [];
-      let remoteCampaigns: CampaignRecord[] = [];
+
+      const localCampaigns = normalizeCampaignsForDisplay(storedCampaigns, getApiBaseUrl());
+      if (!cancelled && localCampaigns.length > 0) {
+        setCampaigns(localCampaigns);
+      }
+
+      if (!cancelled) {
+        setCampaignsHydrated(true);
+      }
 
       try {
         const response = await fetch(apiUrl('/api/campaigns'));
-        if (response.ok) {
-          const list = await response.json();
-          if (Array.isArray(list)) {
-            remoteCampaigns = list.map(normalizeCampaignRecord);
-          }
+        if (cancelled || !response.ok) {
+          return;
         }
+
+        const list = await response.json();
+        if (!Array.isArray(list)) {
+          return;
+        }
+
+        const remoteCampaigns = list.map(normalizeCampaignRecord);
+
+        if (cancelled) {
+          return;
+        }
+
+        setCampaigns((currentCampaigns) => {
+          const mergedCampaigns = normalizeCampaignsForDisplay([
+            ...currentCampaigns,
+            ...remoteCampaigns
+          ], getApiBaseUrl());
+          window.localStorage.setItem(campaignStorageKey, JSON.stringify(mergedCampaigns));
+          return mergedCampaigns;
+        });
       } catch (err) {
         // Keep local data when the backend is unreachable.
       }
-
-      const mergedCampaigns = normalizeCampaignsForDisplay([
-        ...storedCampaigns,
-        ...remoteCampaigns
-      ], getApiBaseUrl());
-
-      if (cancelled) {
-        return;
-      }
-
-      if (mergedCampaigns.length > 0) {
-        setCampaigns(mergedCampaigns);
-        window.localStorage.setItem(campaignStorageKey, JSON.stringify(mergedCampaigns));
-      }
-
-      setCampaignsHydrated(true);
     })();
 
     return () => {
