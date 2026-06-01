@@ -2188,54 +2188,46 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           }}
           onRejectCampaign={(campaignId) => {
             const previousCampaign = campaigns.find((campaign) => campaign.id === campaignId);
-
-            const nextCampaigns = campaigns.filter((campaign) => campaign.id !== campaignId);
-            setCampaigns(nextCampaigns);
-            try {
-              window.localStorage.setItem(campaignStorageKey, JSON.stringify(nextCampaigns));
-            } catch {
-              // ignore write failures
-            }
-
             const nextHiddenRejectedIds = hiddenRejectedCampaignIds.includes(campaignId)
               ? hiddenRejectedCampaignIds
               : [...hiddenRejectedCampaignIds, campaignId];
-            setHiddenRejectedCampaignIds(nextHiddenRejectedIds);
-            saveHiddenRejectedCampaignIdsToStorage(nextHiddenRejectedIds);
-
             const nextHiddenDemoIds = campaignId <= 6
               ? (hiddenDemoCampaignIds.includes(campaignId) ? hiddenDemoCampaignIds : [...hiddenDemoCampaignIds, campaignId])
               : hiddenDemoCampaignIds;
-            if (campaignId <= 6) {
-              setHiddenDemoCampaignIds(nextHiddenDemoIds);
-              saveHiddenDemoCampaignIdsToStorage(nextHiddenDemoIds);
-            }
 
             void (async () => {
               try {
-                  console.log(`[Reject] Menolak kampanye ${campaignId}...`);
-                  const statusUpdateResult = await updateCampaignStatusOnServer(campaignId, 'rejected');
-                  console.log(`[Reject] Status update result:`, statusUpdateResult);
-                
+                console.log(`[Reject] Menolak kampanye ${campaignId}...`);
+                const statusUpdateResult = await updateCampaignStatusOnServer(campaignId, 'rejected');
+                console.log(`[Reject] Status update result:`, statusUpdateResult);
+
+                const nextCampaigns = campaigns.filter((campaign) => campaign.id !== campaignId);
+                setCampaigns(nextCampaigns);
+                try {
+                  window.localStorage.setItem(campaignStorageKey, JSON.stringify(nextCampaigns));
+                } catch {
+                  // ignore write failures
+                }
+
+                setHiddenRejectedCampaignIds(nextHiddenRejectedIds);
+                saveHiddenRejectedCampaignIdsToStorage(nextHiddenRejectedIds);
+
+                if (campaignId <= 6) {
+                  setHiddenDemoCampaignIds(nextHiddenDemoIds);
+                  saveHiddenDemoCampaignIdsToStorage(nextHiddenDemoIds);
+                }
+
                 startRejectUndo(campaignId, previousCampaign);
-                
-                // Wait briefly to ensure server updated status before syncing
-                await new Promise(resolve => window.setTimeout(resolve, 200));
-                
-                  console.log(`[Reject] Syncing campaigns dari server dengan hidden IDs:`, {
-                    hiddenDemoIds: nextHiddenDemoIds,
-                    hiddenRejectedIds: nextHiddenRejectedIds
-                  });
-                
+
+                // Refresh from server to ensure public campaigns are consistent with DB.
                 const syncSuccess = await syncCampaignsFromServer(undefined, nextHiddenDemoIds);
-                  console.log(`[Reject] Sync success:`, syncSuccess);
-                
+                console.log(`[Reject] Sync success:`, syncSuccess);
                 if (!syncSuccess) {
                   console.warn('Sync dari server gagal, mencoba sync ulang...');
-                  await new Promise(resolve => window.setTimeout(resolve, 500));
+                  await new Promise((resolve) => window.setTimeout(resolve, 500));
                   await syncCampaignsFromServer(undefined, nextHiddenDemoIds);
                 }
-                
+
                 try {
                   window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
                 } catch {
@@ -2243,7 +2235,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                 }
               } catch (err) {
                 console.error('Error menolak kampanye:', err);
-                window.alert('Kampanye ditolak secara lokal, tetapi sinkronisasi server gagal. Silakan coba lagi nanti untuk memperbarui status di server.');
+                window.alert('Gagal menolak kampanye di server. Kampanye tetap ditampilkan sampai proses berhasil. Silakan coba lagi.');
               }
             })();
           }}
