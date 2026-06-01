@@ -31,4 +31,21 @@ router.post('/login', async (req, res) => {
   }
 });
 
+router.get('/users', async (req, res) => {
+  try {
+    const users = await User.findAll({
+      attributes: ['id', 'name', 'email'],
+      order: [['createdAt', 'ASC']]
+    });
+
+    res.json(users.map((user) => ({
+      id: user.id,
+      name: user.name,
+      email: user.email
+    })));
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 module.exports = router;

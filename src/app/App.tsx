@@ -92,6 +92,12 @@ type StoredUser = {
   password: string;
 };
 
+type ServerUserRow = {
+  id: number;
+  name: string;
+  email: string;
+};
+
 type PendingPaymentRecord = {
   donationId: number;
   orderId: string;
@@ -271,6 +277,12 @@ const migrateLegacyCampaignId = (campaign: CampaignRecord): CampaignRecord => {
   return nextId ? { ...campaign, id: nextId } : campaign;
 };
 
+const campaignStatusRank: Record<CampaignStatus, number> = {
+  verified: 3,
+  pending: 2,
+  rejected: 1
+};
+
 const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
   const byFingerprint = new Map<string, CampaignRecord>();
 
@@ -286,8 +298,10 @@ const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
     const nextTarget = toSafeNumber(campaign.target, 0);
     const existingCollected = toSafeNumber(existing.collected, 0);
     const nextCollected = toSafeNumber(campaign.collected, 0);
-    const existingScore = existingTarget + existingCollected + (existing.createdAt ?? 0);
-    const nextScore = nextTarget + nextCollected + (campaign.createdAt ?? 0);
+    const existingStatusScore = campaignStatusRank[(existing.status ?? 'pending') as CampaignStatus] ?? 0;
+    const nextStatusScore = campaignStatusRank[(campaign.status ?? 'pending') as CampaignStatus] ?? 0;
+    const existingScore = (existingStatusScore * 1_000_000_000) + existingTarget + existingCollected + (existing.createdAt ?? 0);
+    const nextScore = (nextStatusScore * 1_000_000_000) + nextTarget + nextCollected + (campaign.createdAt ?? 0);
 
     if (nextScore > existingScore) {
       byFingerprint.set(fingerprint, campaign);
@@ -468,6 +482,7 @@ export default function App() {
   const [user, setUser] = useState<AppUser | null>(persistedUser);
   const [adminUser, setAdminUser] = useState<AppUser | null>(persistedAdminUser);
   const [registeredUsers, setRegisteredUsers] = useState<StoredUser[]>(() => loadRegisteredUsersFromStorage());
+  const [serverUsers, setServerUsers] = useState<ServerUserRow[]>([]);
   const [deletedUserEmails, setDeletedUserEmails] = useState<string[]>([]);
   const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>(() => loadWithdrawalRequestsFromStorage());
   const [pendingPayments, setPendingPayments] = useState<PendingPaymentRecord[]>(() => loadPendingPaymentsFromStorage());
@@ -1125,6 +1140,40 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   }, [campaigns, campaignsHydrated]);
 
   useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await fetch(apiUrl('/api/auth/users'));
+        if (!response.ok) {
+          return;
+        }
+
+        const list = await response.json();
+        if (cancelled || !Array.isArray(list)) {
+          return;
+        }
+
+        const mapped = list
+          .map((item: any) => ({
+            id: Number(item.id),
+            name: toSafeText(item.name),
+            email: toSafeText(item.email)
+          }))
+          .filter((item: ServerUserRow) => Number.isFinite(item.id) && item.email.length > 0);
+
+        setServerUsers(mapped);
+      } catch {
+        // keep local fallback
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     if (typeof window === 'undefined') {
       return;
     }
@@ -1219,7 +1268,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     { id: 4, name: 'Sari Wulandari', email: 'sari@bantusesama.id', role: 'user', status: 'active', campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === 'sari@bantusesama.id').length },
   ];
 
-  const registeredUserRows: AdminUserRow[] = registeredUsers
+  const serverRegisteredRows: AdminUserRow[] = (serverUsers.length > 0 ? serverUsers : registeredUsers)
     .filter((account) => !baseAdminUsers.some((item) => item.email === account.email))
     .map((account, index) => ({
       id: 1000 + index,
@@ -1230,8 +1279,20 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === account.email).length
     }));
 
-  const adminUsers = [...baseAdminUsers, ...registeredUserRows]
+  const localRegisteredRows: AdminUserRow[] = registeredUsers
+    .filter((account) => !baseAdminUsers.some((item) => item.email === account.email))
+    .map((account, index) => ({
+      id: 2000 + index,
+      name: account.name,
+      email: account.email,
+      role: 'user',
+      status: 'active',
+      campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === account.email).length
+    }));
+
+  const adminUsers = [...baseAdminUsers, ...serverRegisteredRows, ...localRegisteredRows]
     .filter((item) => !deletedUserEmails.includes(item.email))
+    .filter((item, index, arr) => arr.findIndex((other) => other.email === item.email) === index)
     .sort((a, b) => a.id - b.id);
 
   const clearRejectUndoTimer = () => {

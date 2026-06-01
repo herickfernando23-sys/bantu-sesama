@@ -251,6 +251,7 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
 
       // Use default image if no image provided
       const campaignImage = imagePreview || DEFAULT_CAMPAIGN_IMAGE;
+      const organizerName = user.name?.trim() || user.email?.split('@')[0] || 'Penggalang';
 
       const response = await fetch(apiUrl('/api/campaigns'), {
         method: 'POST',
@@ -262,7 +263,7 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
           description: formData.description,
           goal: targetAmount,
           creatorEmail: user.email,
-          organizer: user.name,
+          organizer: organizerName,
           location: formData.location,
           category: formData.category,
           image: campaignImage,
@@ -293,7 +294,7 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
         donors: 0,
         daysLeft: Number(createdCampaign.daysLeft || 30),
         category: createdCampaign.category || formData.category,
-        organizer: createdCampaign.organizer || user.name,
+        organizer: createdCampaign.organizer || organizerName,
         status: createdCampaign.status || 'pending',
         story: createdCampaign.fullDescription || formData.fullDescription || formData.description,
         fundAllocation: [
