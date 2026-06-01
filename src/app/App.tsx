@@ -286,7 +286,11 @@ const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
   });
 };
 
-const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => ({
+const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
+  const rawGoal = (campaign as CampaignRecord & { goal?: number | string }).goal;
+  const normalizedTarget = Math.max(0, toSafeNumber(campaign.target ?? rawGoal, 0));
+
+  return ({
   ...migrateLegacyCampaignId(campaign),
   createdAt: campaign.createdAt ?? Date.now(),
   title: stripMarkdownHeading(campaign.title),
@@ -298,7 +302,7 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => ({
   category: toSafeText(campaign.category),
   organizer: toSafeText(campaign.organizer),
   creatorEmail: toSafeText(campaign.creatorEmail),
-  target: Math.max(0, toSafeNumber(campaign.target, 0)),
+  target: normalizedTarget,
   collected: Math.max(0, toSafeNumber(campaign.collected, 0)),
   donors: Math.max(0, toSafeNumber(campaign.donors, 0)),
   daysLeft: Math.max(0, toSafeNumber(campaign.daysLeft, 0)),
@@ -309,6 +313,7 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => ({
   disbursementHistory: Array.isArray(campaign.disbursementHistory) ? campaign.disbursementHistory : [],
   donations: Array.isArray(campaign.donations) ? campaign.donations : []
 });
+};
 
 const infoPageContent: Record<InfoPageKey, { eyebrow: string; title: string; description: string; points: string[] }> = {
   'tentang-kami': {
