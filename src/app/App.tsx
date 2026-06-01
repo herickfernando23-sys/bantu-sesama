@@ -122,7 +122,7 @@ type RecurringDonationRecord = {
 
 const campaignStorageKey = 'bantusesama-campaigns';
 const campaignCleanupVersionKey = 'bantusesama-campaign-cleanup-version';
-const campaignCleanupVersion = '2026-06-01-v2';
+const campaignCleanupVersion = '2026-06-01-v3';
 const hiddenDemoCampaignIdsKey = 'bantusesama-hidden-demo-campaign-ids';
 const registeredUsersKey = 'bantusesama-registered-users';
 const adminSessionKey = 'bantusesama-admin-session';
@@ -350,15 +350,10 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   
   const normalizedCollected = Math.max(0, toSafeNumber(campaign.collected, 0));
   const normalizedDonors = Math.max(0, toSafeNumber(campaign.donors, 0));
-
-  // Only apply fallback to demo/seed campaigns (id <= 6), not to user-created campaigns
-  const isDemo = campaign.id <= 6;
-  const fallbackCollected = isDemo && normalizedCollected === 0 && normalizedTarget > 0
-    ? Math.max(500000, Math.round(normalizedTarget * 0.15))
+  const isSeedDemoCampaign = Number.isFinite(campaign.id) && campaign.id > 0 && campaign.id <= 6;
+  const correctedCollected = normalizedDonors === 0 && normalizedCollected > 0 && !isSeedDemoCampaign
+    ? 0
     : normalizedCollected;
-  const fallbackDonors = normalizedDonors === 0 && fallbackCollected > 0
-    ? Math.max(2, Math.round(fallbackCollected / 100000))
-    : normalizedDonors;
 
   const migratedCampaign = migrateLegacyCampaignId(campaign);
   const normalizedId = Number(migratedCampaign.id);
@@ -378,10 +373,10 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   creatorEmail: toSafeText(campaign.creatorEmail),
   goal: rawGoal,
   target: normalizedTarget,
-  collected: fallbackCollected,
-  donors: fallbackDonors,
+  collected: correctedCollected,
+  donors: normalizedDonors,
   daysLeft: Math.max(0, toSafeNumber(campaign.daysLeft, 0)),
-  status: campaign.id <= 6
+  status: Number.isFinite(campaign.id) && campaign.id > 0 && campaign.id <= 6
     ? (campaign.status === 'rejected' ? 'rejected' : 'verified')
     : (campaign.status ?? 'pending'),
   fundAllocation: Array.isArray(campaign.fundAllocation) ? campaign.fundAllocation : [],

@@ -167,12 +167,21 @@ function TipsPanel() {
 export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onVerifyCampaign, onRejectCampaign, onDeleteUser, onUpdateWithdrawalStatus, onClearWithdrawals, onLogout }: AdminDashboardProps) {
   const PAGE_SIZE = 6;
   const [campaignPage, setCampaignPage] = useState(1);
+  const [campaignFadeOut, setCampaignFadeOut] = useState(false);
   const pageTransitionTimerRef = useRef<number | null>(null);
+  const previousCampaignCountRef = useRef(campaigns.length);
 
   useEffect(() => {
     const totalPages = Math.max(1, Math.ceil(campaigns.length / PAGE_SIZE));
     setCampaignPage((currentPage) => Math.min(currentPage, totalPages));
   }, [campaigns]);
+
+  useEffect(() => {
+    if (campaigns.length > previousCampaignCountRef.current && campaignPage > 1) {
+      setCampaignPage(1);
+    }
+    previousCampaignCountRef.current = campaigns.length;
+  }, [campaigns.length, campaignPage]);
 
   useEffect(() => () => {
     if (pageTransitionTimerRef.current) {
@@ -217,9 +226,12 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
       window.clearTimeout(pageTransitionTimerRef.current);
     }
 
-    // Removed fade-out animation that caused flickering - now change page immediately
-    setCampaignPage(nextPage);
-    pageTransitionTimerRef.current = null;
+    setCampaignFadeOut(true);
+    pageTransitionTimerRef.current = window.setTimeout(() => {
+      setCampaignPage(nextPage);
+      window.requestAnimationFrame(() => setCampaignFadeOut(false));
+      pageTransitionTimerRef.current = null;
+    }, 220);
   };
 
   const totalRaised = normalizedCampaigns.reduce((sum, campaign) => sum + campaign.collected, 0);
@@ -553,7 +565,8 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
               ) : (
                 pendingCampaigns.map((campaign) => {
                   const effectiveTarget = campaign.target > 0 ? campaign.target : (campaign.goal ?? 0);
-                  const progress = effectiveTarget > 0 ? Math.min((campaign.collected / effectiveTarget) * 100, 100) : 0;
+                  const displayCollected = campaign.donors > 0 ? campaign.collected : 0;
+                  const progress = effectiveTarget > 0 ? Math.min((displayCollected / effectiveTarget) * 100, 100) : 0;
                   return (
                     <div key={campaign.id} className="rounded-2xl border border-slate-700 bg-slate-700/30 p-4">
                       <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
@@ -713,7 +726,7 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
               </CardDescription>
             </CardHeader>
             <CardContent className="px-6 pb-6">
-              <div className={`w-full max-h-[420px] overflow-y-auto overflow-x-hidden rounded-2xl border border-slate-700`}>
+              <div className={`w-full max-h-[420px] overflow-y-auto overflow-x-hidden rounded-2xl border border-slate-700 transition-opacity duration-300 ${campaignFadeOut ? 'opacity-0' : 'opacity-100'}`}>
                 <table className="w-full table-fixed text-left text-sm">
                   <thead className="sticky top-0 z-10 bg-slate-800 text-slate-400 border-b border-slate-700">
                     <tr>
@@ -727,9 +740,9 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
                   <tbody>
                     {paginatedCampaigns.map((campaign) => {
                       const effectiveTarget = campaign.target > 0 ? campaign.target : (campaign.goal ?? 0);
-                      const displayTarget = effectiveTarget > 0 ? effectiveTarget : 5000000;
-                      const displayCollected = campaign.collected > 0 ? campaign.collected : Math.max(500000, Math.round(displayTarget * 0.15));
-                      const displayDonors = campaign.donors > 0 ? campaign.donors : 2;
+                      const displayTarget = effectiveTarget > 0 ? effectiveTarget : 0;
+                      const displayCollected = campaign.donors > 0 ? campaign.collected : 0;
+                      const displayDonors = campaign.donors > 0 ? campaign.donors : 0;
                       const progress = displayTarget > 0 ? Math.min((displayCollected / displayTarget) * 100, 100) : 0;
                       const isPending = campaign.status === 'pending';
                       const isRejected = campaign.status === 'rejected';
