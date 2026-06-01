@@ -1844,7 +1844,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           </div>
         )}
         <AdminDashboard
-          campaigns={campaignsForDisplay}
+          campaigns={campaigns}
           users={adminUsers}
           withdrawalRequests={withdrawalRequests}
           user={adminUser}
