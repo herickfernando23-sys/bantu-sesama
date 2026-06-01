@@ -2128,7 +2128,6 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                 } catch {
                   // ignore write failures
                 }
-                }
               } catch (err) {
                 console.error(err);
                 window.alert('Gagal memverifikasi kampanye. Coba lagi.');
