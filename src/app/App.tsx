@@ -603,8 +603,7 @@ export default function App() {
 
   const syncCampaignsFromServer = async (
     cancelledRef?: { current: boolean },
-    extraHiddenDemoCampaignIds: number[] = [],
-    extraHiddenRejectedCampaignIds: number[] = []
+    extraHiddenDemoCampaignIds: number[] = []
   ): Promise<boolean> => {
     try {
       const response = await fetch(apiUrl(`/api/campaigns?_=${Date.now()}`), { cache: 'no-store' });
@@ -618,12 +617,10 @@ export default function App() {
       }
 
       const hiddenDemoIds = new Set([...hiddenDemoCampaignIds, ...extraHiddenDemoCampaignIds]);
-      const hiddenRejectedIds = new Set([...hiddenRejectedCampaignIds, ...extraHiddenRejectedCampaignIds]);
 
       let remoteCampaigns = normalizeCampaignsForDisplay(list.map(normalizeCampaignRecord), getApiBaseUrl());
       remoteCampaigns = remoteCampaigns.filter((campaign) => (
         !hiddenDemoIds.has(campaign.id)
-        && !hiddenRejectedIds.has(campaign.id)
         && campaign.status !== 'rejected'
       ));
 
@@ -1133,7 +1130,6 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           .filter((campaign) => (
             campaign.status !== 'rejected'
             && !hiddenDemoCampaignIds.includes(campaign.id)
-            && !hiddenRejectedCampaignIds.includes(campaign.id)
           ))
         : null;
 
@@ -1255,7 +1251,10 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       if (event.key === hiddenRejectedCampaignIdsKey) {
         const nextHiddenIds = loadHiddenRejectedCampaignIdsFromStorage();
         setHiddenRejectedCampaignIds(nextHiddenIds);
-        setCampaigns((prev) => prev.filter((campaign) => !nextHiddenIds.includes(campaign.id)));
+        setCampaigns((prev) => prev.filter((campaign) => (
+          campaign.status !== 'rejected'
+          || !nextHiddenIds.includes(campaign.id)
+        )));
       }
     };
 
@@ -1270,7 +1269,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
     setCampaigns((prev) => prev.filter((campaign) => (
       campaign.status !== 'rejected'
-      && !hiddenRejectedCampaignIds.includes(campaign.id)
+      || !hiddenRejectedCampaignIds.includes(campaign.id)
     )));
   }, [hiddenRejectedCampaignIds]);
 
@@ -2145,6 +2144,13 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
             void (async () => {
               clearRejectUndoTimer();
               setRejectUndoState(null);
+
+              const nextHiddenRejectedIds = hiddenRejectedCampaignIds.filter((id) => id !== campaignId);
+              if (nextHiddenRejectedIds.length !== hiddenRejectedCampaignIds.length) {
+                setHiddenRejectedCampaignIds(nextHiddenRejectedIds);
+                saveHiddenRejectedCampaignIdsToStorage(nextHiddenRejectedIds);
+              }
+
               try {
                 await updateCampaignStatusOnServer(campaignId, 'verified');
                 await syncCampaignsFromServer();
@@ -2200,13 +2206,13 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                     hiddenRejectedIds: nextHiddenRejectedIds
                   });
                 
-                const syncSuccess = await syncCampaignsFromServer(undefined, nextHiddenDemoIds, nextHiddenRejectedIds);
+                const syncSuccess = await syncCampaignsFromServer(undefined, nextHiddenDemoIds);
                   console.log(`[Reject] Sync success:`, syncSuccess);
                 
                 if (!syncSuccess) {
                   console.warn('Sync dari server gagal, mencoba sync ulang...');
                   await new Promise(resolve => window.setTimeout(resolve, 500));
-                  await syncCampaignsFromServer(undefined, nextHiddenDemoIds, nextHiddenRejectedIds);
+                  await syncCampaignsFromServer(undefined, nextHiddenDemoIds);
                 }
                 
                 try {
