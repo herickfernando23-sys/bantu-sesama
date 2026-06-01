@@ -10,7 +10,7 @@ import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ContinuePaymentPage } from './components/ContinuePaymentPage';
 import { Chatbot } from './components/Chatbot';
-import { getApiBaseUrl } from './lib/apiBaseUrl';
+import { apiUrl, getApiBaseUrl } from './lib/apiBaseUrl';
 import { TrendingUp, Shield, Users, Heart } from 'lucide-react';
 
 type Page =
@@ -441,6 +441,40 @@ export default function App() {
     } catch {
       return null;
     }
+  };
+
+  const normalizeCampaignsForDisplay = (items: CampaignRecord[], apiBase: string) => {
+    const originalImagesFor1to6: Record<number, string> = {
+      1: 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      2: 'https://images.unsplash.com/photo-1774370793502-85098cd3fd00?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwyfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      3: 'https://images.unsplash.com/photo-1762592957827-99db60cfd0c7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cmFkaXRpb25hbCUyMG1hcmtldCUyMGZvb2QlMjB2ZW5kb3J8ZW58MXx8fHwxNzc3NTMyOTM3fDA&ixlib=rb-4.1.0&q=80&w=1080',
+      4: 'https://images.unsplash.com/photo-1768637758036-9a690925ae72?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw0fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      5: 'https://images.unsplash.com/photo-1757763006278-d0fa5d582d0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      6: 'https://images.unsplash.com/photo-1767678233351-9308d8220fa5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw1fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080'
+    };
+
+    return dedupeCampaigns(items).map((campaign) => {
+      if (campaign && typeof campaign.id === 'number' && originalImagesFor1to6[campaign.id]) {
+        return { ...campaign, image: originalImagesFor1to6[campaign.id] };
+      }
+
+      if (campaign && typeof campaign.id === 'number' && campaignImageOverrides[campaign.id]) {
+        return { ...campaign, image: campaignImageOverrides[campaign.id] };
+      }
+
+      try {
+        if (typeof campaign.image === 'string' && campaign.image.startsWith('http')) {
+          const parsed = new URL(campaign.image);
+          if (!campaign.image.startsWith(`${apiBase}/image-proxy`) && parsed.hostname !== window.location.hostname) {
+            return { ...campaign, image: `${apiBase}/image-proxy?url=${encodeURIComponent(campaign.image)}` };
+          }
+        }
+      } catch (err) {
+        // ignore malformed urls
+      }
+
+      return campaign;
+    });
   };
 
   const getCampaignIdFromUrl = () => {
@@ -997,51 +1031,44 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   }, [campaignsHydrated]);
 
   useEffect(() => {
-    const storedCampaigns = loadCampaignsFromStorage();
-    if (storedCampaigns && storedCampaigns.length > 0) {
-      const apiBase = getApiBaseUrl();
-      const originalImagesFor1to6: Record<number, string> = {
-        1: 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-        2: 'https://images.unsplash.com/photo-1774370793502-85098cd3fd00?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwyfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-        3: 'https://images.unsplash.com/photo-1762592957827-99db60cfd0c7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cmFkaXRpb25hbCUyMG1hcmtldCUyMGZvb2QlMjB2ZW5kb3J8ZW58MXx8fHwxNzc3NTMyOTM3fDA&ixlib=rb-4.1.0&q=80&w=1080',
-        4: 'https://images.unsplash.com/photo-1768637758036-9a690925ae72?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw0fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-        5: 'https://images.unsplash.com/photo-1757763006278-d0fa5d582d0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-        6: 'https://images.unsplash.com/photo-1767678233351-9308d8220fa5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw1fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080'
-      };
+    let cancelled = false;
 
-      const cleanedCampaigns = dedupeCampaigns(storedCampaigns).map((c) => {
-        // restore original images for campaigns 1-6 to avoid accidental proxying or broken URLs
-        if (c && typeof c.id === 'number' && originalImagesFor1to6[c.id]) {
-          return { ...c, image: originalImagesFor1to6[c.id] };
-        }
+    (async () => {
+      const storedCampaigns = loadCampaignsFromStorage() || [];
+      let remoteCampaigns: CampaignRecord[] = [];
 
-        if (c && typeof c.id === 'number' && campaignImageOverrides[c.id]) {
-          return { ...c, image: campaignImageOverrides[c.id] };
-        }
-
-        try {
-          if (typeof c.image === 'string' && c.image.startsWith('http')) {
-            const parsed = new URL(c.image);
-            // If image is already served via our proxy, keep it
-            if (!c.image.startsWith(`${apiBase}/image-proxy`)) {
-              // Proxy external images (avoid proxying same-origin or data/blob)
-              if (parsed.hostname !== window.location.hostname) {
-                return { ...c, image: `${apiBase}/image-proxy?url=${encodeURIComponent(c.image)}` };
-              }
-            }
+      try {
+        const response = await fetch(apiUrl('/api/campaigns'));
+        if (response.ok) {
+          const list = await response.json();
+          if (Array.isArray(list)) {
+            remoteCampaigns = list.map(normalizeCampaignRecord);
           }
-        } catch (err) {
-          // ignore malformed urls
         }
+      } catch (err) {
+        // Keep local data when the backend is unreachable.
+      }
 
-        return c;
-      });
+      const mergedCampaigns = normalizeCampaignsForDisplay([
+        ...storedCampaigns,
+        ...remoteCampaigns
+      ], getApiBaseUrl());
 
-      setCampaigns(cleanedCampaigns);
-      window.localStorage.setItem(campaignStorageKey, JSON.stringify(cleanedCampaigns));
-    }
+      if (cancelled) {
+        return;
+      }
 
-    setCampaignsHydrated(true);
+      if (mergedCampaigns.length > 0) {
+        setCampaigns(mergedCampaigns);
+        window.localStorage.setItem(campaignStorageKey, JSON.stringify(mergedCampaigns));
+      }
+
+      setCampaignsHydrated(true);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
