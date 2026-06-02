@@ -5,6 +5,12 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
 router.route('/register')
+  .get((req, res) => {
+    res.json({
+      status: 'ok',
+      message: 'Endpoint ini menerima POST untuk registrasi. GET requests diabaikan.'
+    });
+  })
   .post(async (req, res) => {
     try {
       const { name, email, password } = req.body;

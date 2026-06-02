@@ -137,6 +137,7 @@ const toSafeNumber = (value: unknown, fallback = 0) => {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
 };
+const normalizeEmail = (email: unknown) => String(email ?? '').trim().toLowerCase();
 const stripMarkdownHeading = (value: unknown) => toSafeText(value).replace(/^\s*#{1,6}\s*/gm, '').replace(/\s+/g, ' ').trim();
 const normalizeKeyText = (value: unknown) => stripMarkdownHeading(value).toLowerCase();
 const legacyCampaignIdMap: Record<number, number> = {
@@ -580,9 +581,10 @@ export default function App() {
   const [page, setPage] = useState<Page>(initialPage);
   const [user, setUser] = useState<AppUser | null>(persistedUser);
   const [adminUser, setAdminUser] = useState<AppUser | null>(persistedAdminUser);
-  const [registeredUsers, setRegisteredUsers] = useState<StoredUser[]>(() => loadRegisteredUsersFromStorage());
+  const initialDeletedUserEmails = loadDeletedUserEmailsFromStorage().map(normalizeEmail);
+  const [deletedUserEmails, setDeletedUserEmails] = useState<string[]>(initialDeletedUserEmails);
+  const [registeredUsers, setRegisteredUsers] = useState<StoredUser[]>(() => loadRegisteredUsersFromStorage().filter((account) => !initialDeletedUserEmails.includes(normalizeEmail(account.email))));
   const [serverUsers, setServerUsers] = useState<ServerUserRow[]>([]);
-  const [deletedUserEmails, setDeletedUserEmails] = useState<string[]>(() => loadDeletedUserEmailsFromStorage());
   const [hiddenDemoCampaignIds, setHiddenDemoCampaignIds] = useState<number[]>(() => loadHiddenDemoCampaignIdsFromStorage());
   const [hiddenRejectedCampaignIds, setHiddenRejectedCampaignIds] = useState<number[]>(() => loadHiddenRejectedCampaignIdsFromStorage());
   const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>(() => loadWithdrawalRequestsFromStorage());
@@ -615,8 +617,13 @@ export default function App() {
     try {
       const raw = window.localStorage.getItem(deletedUserEmailsKey);
       const parsed = raw ? (JSON.parse(raw) as string[]) : [];
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
+      const result = Array.isArray(parsed)
+        ? parsed.map(normalizeEmail).filter((email) => email.length > 0)
+        : [];
+      console.log('[DEBUG] loadDeletedUserEmailsFromStorage:', { raw, parsed, result });
+      return result;
+    } catch (error) {
+      console.error('[DEBUG] loadDeletedUserEmailsFromStorage error:', error);
       return [] as string[];
     }
   }
@@ -627,9 +634,12 @@ export default function App() {
     }
 
     try {
-      window.localStorage.setItem(deletedUserEmailsKey, JSON.stringify(emails));
-    } catch {
-      // ignore write failures
+      const normalized = emails.map(normalizeEmail).filter((email) => email.length > 0);
+      const jsonString = JSON.stringify(normalized);
+      window.localStorage.setItem(deletedUserEmailsKey, jsonString);
+      console.log('[DEBUG] saveDeletedUserEmailsToStorage:', { emails, normalized, jsonString, stored: window.localStorage.getItem(deletedUserEmailsKey) });
+    } catch (error) {
+      console.error('[DEBUG] saveDeletedUserEmailsToStorage error:', error);
     }
   }
 
@@ -1234,21 +1244,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     let cancelled = false;
 
     (async () => {
-      const shouldSyncUsersToBackend = (typeof import.meta !== 'undefined' && typeof (import.meta as any).env !== 'undefined' && (import.meta as any).env.DEV) && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
-      if (shouldSyncUsersToBackend) {
-        const storedUsers = loadRegisteredUsersFromStorage();
-        storedUsers.forEach((storedUser) => {
-          void fetch(apiUrl('/api/auth/register'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: storedUser.name,
-              email: storedUser.email,
-              password: storedUser.password
-            })
-          }).catch(() => null);
-        });
-      }
+      // Disable automatic dev-side user registration sync on startup.
+      // This was causing repeated 400 responses when demo/local users already existed server-side.
+      // If future behavior is needed, add explicit user migration logic with proper status handling.
 
       const storedCampaigns = loadCampaignsFromStorage();
       const localCampaigns = storedCampaigns !== null
@@ -1380,7 +1378,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       }
 
       if (event.key === registeredUsersKey) {
-        setRegisteredUsers(loadRegisteredUsersFromStorage());
+        const loaded = loadRegisteredUsersFromStorage();
+        console.log('[DEBUG] storage event registeredUsersKey:', { loaded, currentDeletedUserEmails: deletedUserEmails });
+        setRegisteredUsers(loaded);
       }
 
       if (event.key === withdrawalRequestsKey) {
@@ -1405,6 +1405,13 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           || !nextHiddenIds.includes(campaign.id)
         )));
       }
+
+      if (event.key === deletedUserEmailsKey) {
+        const nextDeletedEmails = loadDeletedUserEmailsFromStorage().map(normalizeEmail);
+        setDeletedUserEmails(nextDeletedEmails);
+        setServerUsers((prev) => prev.filter((account) => !nextDeletedEmails.includes(normalizeEmail(account.email))));
+        setRegisteredUsers((prev) => prev.filter((account) => !nextDeletedEmails.includes(normalizeEmail(account.email))));
+      }
     };
 
     window.addEventListener('storage', handleStorage);
@@ -1421,6 +1428,10 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       || !hiddenRejectedCampaignIds.includes(campaign.id)
     )));
   }, [hiddenRejectedCampaignIds]);
+
+  useEffect(() => {
+    console.log('[DEBUG] deletedUserEmails changed:', deletedUserEmails);
+  }, [deletedUserEmails]);
 
   useEffect(() => {
     if (!campaignsHydrated) {
@@ -1495,7 +1506,10 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           }))
           .filter((item: ServerUserRow) => Number.isFinite(item.id) && item.email.length > 0);
 
-        setServerUsers(mapped);
+        const currentDeletedEmails = loadDeletedUserEmailsFromStorage().map(normalizeEmail);
+        const filtered = mapped.filter((account) => !currentDeletedEmails.includes(normalizeEmail(account.email)));
+        console.log('[DEBUG] fetch /api/auth/users:', { mapped, currentDeletedEmails, filtered });
+        setServerUsers(filtered);
       } catch {
         // keep local fallback
       }
@@ -1521,6 +1535,29 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
     window.localStorage.setItem(pendingPaymentsKey, JSON.stringify(pendingPayments));
   }, [pendingPayments]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const deletedEmails = loadDeletedUserEmailsFromStorage().map(normalizeEmail);
+    if (deletedEmails.length === 0) {
+      return;
+    }
+
+    setRegisteredUsers((prev) => {
+      const next = prev.filter((user) => !deletedEmails.includes(normalizeEmail(user.email)));
+      if (next.length !== prev.length) {
+        try {
+          window.localStorage.setItem(registeredUsersKey, JSON.stringify(next));
+        } catch {
+          // ignore write failures
+        }
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -1614,32 +1651,36 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     { id: 4, name: 'Sari Wulandari', email: 'sari@bantusesama.id', role: 'user', status: 'active', campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === 'sari@bantusesama.id').length },
   ];
 
+  const normalizedDeletedEmails = deletedUserEmails.map(normalizeEmail);
+
   const serverRegisteredRows: AdminUserRow[] = (serverUsers.length > 0 ? serverUsers : registeredUsers)
-    .filter((account) => !baseAdminUsers.some((item) => item.email === account.email))
+    .filter((account) => !baseAdminUsers.some((item) => normalizeEmail(item.email) === normalizeEmail(account.email)))
     .map((account, index) => ({
       id: 1000 + index,
       name: account.name,
       email: account.email,
       role: 'user',
       status: 'active',
-      campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === account.email).length
+      campaignCount: campaigns.filter((campaign) => normalizeEmail(campaign.creatorEmail) === normalizeEmail(account.email)).length
     }));
 
   const localRegisteredRows: AdminUserRow[] = registeredUsers
-    .filter((account) => !baseAdminUsers.some((item) => item.email === account.email))
+    .filter((account) => !baseAdminUsers.some((item) => normalizeEmail(item.email) === normalizeEmail(account.email)))
     .map((account, index) => ({
       id: 2000 + index,
       name: account.name,
       email: account.email,
       role: 'user',
       status: 'active',
-      campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === account.email).length
+      campaignCount: campaigns.filter((campaign) => normalizeEmail(campaign.creatorEmail) === normalizeEmail(account.email)).length
     }));
 
   const adminUsers = [...baseAdminUsers, ...serverRegisteredRows, ...localRegisteredRows]
-    .filter((item) => !deletedUserEmails.includes(item.email))
-    .filter((item, index, arr) => arr.findIndex((other) => other.email === item.email) === index)
+    .filter((item) => !normalizedDeletedEmails.includes(normalizeEmail(item.email)))
+    .filter((item, index, arr) => arr.findIndex((other) => normalizeEmail(other.email) === normalizeEmail(item.email)) === index)
     .sort((a, b) => a.id - b.id);
+  
+  console.log('[DEBUG] adminUsers computed:', { normalizedDeletedEmails, adminUsersCount: adminUsers.length, adminUsers: adminUsers.map(u => u.email) });
 
   const clearRejectUndoTimer = () => {
     if (rejectUndoTimeoutRef.current) {
@@ -2333,7 +2374,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
             </div>
           </div>
         )}
-        {deletedUserUndoState && (
+        {deletedUserUndoState && false && (
           <div className="fixed top-20 left-0 right-0 z-50 mx-auto px-4 sm:px-6 lg:px-8 flex justify-center">
             <div className="max-w-7xl w-full rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-rose-900 flex items-center justify-between gap-3">
               <span>
@@ -2476,16 +2517,28 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
             navigatePage('admin-login');
           }}
           onDeleteUser={(email) => {
-            const deletedUser = registeredUsers.find((account) => account.email === email) ?? null;
-            const removedCampaigns = campaigns.filter((campaign) => campaign.creatorEmail === email);
-            const filteredUsers = registeredUsers.filter((account) => account.email !== email);
+            const normalizedEmail = normalizeEmail(email);
+            console.log('[DEBUG] onDeleteUser start:', { email, normalizedEmail, currentDeletedUserEmails: deletedUserEmails });
+            
+            const filteredUsers = registeredUsers.filter((account) => normalizeEmail(account.email) !== normalizedEmail);
             setRegisteredUsers(filteredUsers);
-            window.localStorage.setItem(registeredUsersKey, JSON.stringify(filteredUsers));
-            const nextDeletedEmails = deletedUserEmails.includes(email) ? deletedUserEmails : [...deletedUserEmails, email];
+            try {
+              window.localStorage.setItem(registeredUsersKey, JSON.stringify(filteredUsers));
+            } catch {
+              // ignore write failures
+            }
+
+            const nextDeletedEmails = deletedUserEmails.includes(normalizedEmail)
+              ? deletedUserEmails
+              : [...deletedUserEmails, normalizedEmail];
+            console.log('[DEBUG] onDeleteUser nextDeletedEmails:', { nextDeletedEmails });
+            
             setDeletedUserEmails(nextDeletedEmails);
             saveDeletedUserEmailsToStorage(nextDeletedEmails);
-            setCampaigns((prev) => prev.filter((campaign) => campaign.creatorEmail !== email));
-            startDeletedUserUndo(email, deletedUser, removedCampaigns);
+            setServerUsers((prev) => prev.filter((account) => normalizeEmail(account.email) !== normalizedEmail));
+            setCampaigns((prev) => prev.filter((campaign) => normalizeEmail(campaign.creatorEmail) !== normalizedEmail));
+            
+            window.alert('User ' + email + ' berhasil dihapus permanen.');
           }}
         />
       </>
