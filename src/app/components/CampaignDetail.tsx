@@ -479,8 +479,8 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
         goal: nextTarget,
         daysLeft: nextDaysLeft,
         story: editStory.trim(),
-        fundAllocation: nextAllocations.length > 0 ? nextAllocations : campaign.fundAllocation,
-        disbursementHistory: nextDisbursements.length > 0 ? nextDisbursements : campaign.disbursementHistory
+        fundAllocation: nextAllocations,
+        disbursementHistory: nextDisbursements
       });
       setIsEditing(false);
     } catch (err) {

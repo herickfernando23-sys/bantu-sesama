@@ -4,33 +4,42 @@ const { User } = require('../models');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 
-router.post('/register', async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
+router.route('/register')
+  .post(async (req, res) => {
+    try {
+      const { name, email, password } = req.body;
 
-    // Validate required fields
-    if (!name || !email || !password) {
-      return res.status(400).json({ 
-        message: 'Nama, email, dan password diperlukan',
-        missing: [!name && 'name', !email && 'email', !password && 'password'].filter(Boolean)
-      });
+      // Validate required fields
+      if (!name || !email || !password) {
+        return res.status(400).json({ 
+          message: 'Nama, email, dan password diperlukan',
+          missing: [!name && 'name', !email && 'email', !password && 'password'].filter(Boolean)
+        });
+      }
+
+      // Check if email already exists
+      const exists = await User.findOne({ where: { email } });
+      if (exists) {
+        return res.status(400).json({ message: 'Email sudah terdaftar' });
+      }
+
+      // Create user
+      const user = await User.create({ name, email, password });
+      const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'change_me');
+      res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
+    } catch (err) {
+      console.error('Register error:', err.message);
+      res.status(500).json({ error: err.message });
     }
-
-    // Check if email already exists
-    const exists = await User.findOne({ where: { email } });
-    if (exists) {
-      return res.status(400).json({ message: 'Email sudah terdaftar' });
-    }
-
-    // Create user
-    const user = await User.create({ name, email, password });
-    const token = jwt.sign({ id: user.id }, process.env.JWT_SECRET || 'change_me');
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
-  } catch (err) {
-    console.error('Register error:', err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
+  })
+  .all((req, res) => {
+    res.status(405).json({
+      error: 'Method not allowed',
+      method: req.method,
+      path: req.originalUrl,
+      message: 'Gunakan POST /api/auth/register untuk registrasi.'
+    });
+  });
 
 router.post('/login', async (req, res) => {
   try {

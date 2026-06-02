@@ -582,7 +582,7 @@ export default function App() {
   const [adminUser, setAdminUser] = useState<AppUser | null>(persistedAdminUser);
   const [registeredUsers, setRegisteredUsers] = useState<StoredUser[]>(() => loadRegisteredUsersFromStorage());
   const [serverUsers, setServerUsers] = useState<ServerUserRow[]>([]);
-  const [deletedUserEmails, setDeletedUserEmails] = useState<string[]>([]);
+  const [deletedUserEmails, setDeletedUserEmails] = useState<string[]>(() => loadDeletedUserEmailsFromStorage());
   const [hiddenDemoCampaignIds, setHiddenDemoCampaignIds] = useState<number[]>(() => loadHiddenDemoCampaignIdsFromStorage());
   const [hiddenRejectedCampaignIds, setHiddenRejectedCampaignIds] = useState<number[]>(() => loadHiddenRejectedCampaignIdsFromStorage());
   const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>(() => loadWithdrawalRequestsFromStorage());
@@ -599,10 +599,39 @@ export default function App() {
   const campaignPageTransitionTimerRef = useRef<number | null>(null);
   const campaignListTopRef = useRef<HTMLDivElement | null>(null);
   const syncCampaignsInFlightRef = useRef(false);
+  const isUpdatingCampaignsLocallRef = useRef(false);
+  const lastCampaignSyncAtRef = useRef(0);
 
   const campaignStorageKey = 'bantusesama-campaigns';
   const campaignUpdatedEventKey = 'bantusesama-campaigns-updated';
   const hiddenRejectedCampaignIdsKey = 'bantusesama-hidden-rejected-campaign-ids';
+  const deletedUserEmailsKey = 'bantusesama-deleted-user-emails';
+
+  function loadDeletedUserEmailsFromStorage() {
+    if (typeof window === 'undefined') {
+      return [] as string[];
+    }
+
+    try {
+      const raw = window.localStorage.getItem(deletedUserEmailsKey);
+      const parsed = raw ? (JSON.parse(raw) as string[]) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [] as string[];
+    }
+  }
+
+  function saveDeletedUserEmailsToStorage(emails: string[]) {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(deletedUserEmailsKey, JSON.stringify(emails));
+    } catch {
+      // ignore write failures
+    }
+  }
 
   const loadCampaignsFromStorage = () => {
     if (typeof window === 'undefined') {
@@ -656,13 +685,15 @@ export default function App() {
     cancelledRef?: { current: boolean },
     extraHiddenDemoCampaignIds: number[] = []
   ): Promise<boolean> => {
-    if (syncCampaignsInFlightRef.current) {
+    const now = Date.now();
+    if (syncCampaignsInFlightRef.current || (now - lastCampaignSyncAtRef.current) < 5000) {
       return false;
     }
 
     syncCampaignsInFlightRef.current = true;
     try {
-      const response = await fetch(apiUrl(`/api/campaigns?_=${Date.now()}`), { cache: 'no-store' });
+      lastCampaignSyncAtRef.current = now;
+      const response = await fetch(apiUrl(`/api/campaigns?_=${now}`), { cache: 'no-store' });
       if ((cancelledRef?.current ?? false) || !response.ok) {
         return false;
       }
@@ -718,14 +749,13 @@ export default function App() {
       // Server-side campaign list should be authoritative for public listings.
       setCampaigns(remoteCampaigns);
       try {
+        isUpdatingCampaignsLocallRef.current = true;
         window.localStorage.setItem(campaignStorageKey, JSON.stringify(remoteCampaigns));
-      } catch {
-        // ignore write failures
-      }
-      try {
         window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
       } catch {
         // ignore write failures
+      } finally {
+        isUpdatingCampaignsLocallRef.current = false;
       }
       return true;
     } catch (err) {
@@ -1251,21 +1281,30 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   }, []);
 
   useEffect(() => {
+    const shouldSync = () => {
+      const now = Date.now();
+      return !syncCampaignsInFlightRef.current && (now - lastCampaignSyncAtRef.current) >= 5000;
+    };
+
     const handleVisibilitySync = () => {
-      if (document.visibilityState === 'visible') {
+      if (document.visibilityState === 'visible' && shouldSync()) {
         void syncCampaignsFromServer();
       }
     };
 
     const handleFocusSync = () => {
-      void syncCampaignsFromServer();
-    };
-
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState === 'visible') {
+      if (shouldSync()) {
         void syncCampaignsFromServer();
       }
-    }, 15000);
+    };
+
+    // Only poll in admin page; public pages sync on visibility change/focus only
+    const pollInterval = page === 'admin' ? 60000 : null; // 60 seconds for admin, disabled for public
+    const intervalId = pollInterval ? window.setInterval(() => {
+      if (document.visibilityState === 'visible' && shouldSync()) {
+        void syncCampaignsFromServer();
+      }
+    }, pollInterval) : null;
 
     window.addEventListener('focus', handleFocusSync);
     document.addEventListener('visibilitychange', handleVisibilitySync);
@@ -1273,9 +1312,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     return () => {
       window.removeEventListener('focus', handleFocusSync);
       document.removeEventListener('visibilitychange', handleVisibilitySync);
-      window.clearInterval(intervalId);
+      if (intervalId !== null) window.clearInterval(intervalId);
     };
-  }, []);
+  }, [page]);
 
   // Sync campaigns from server when entering admin page
   useEffect(() => {
@@ -1307,16 +1346,28 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
 
     try {
+      isUpdatingCampaignsLocallRef.current = true;
       window.localStorage.setItem(campaignStorageKey, JSON.stringify(campaigns));
+      window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
     } catch {
       // ignore write failures in environments where localStorage is unavailable
+    } finally {
+      isUpdatingCampaignsLocallRef.current = false;
     }
   }, [campaigns, campaignsHydrated]);
 
   useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
+      // Skip sync if we just updated localStorage ourselves to prevent feedback loop
+      if (isUpdatingCampaignsLocallRef.current) {
+        return;
+      }
+
       if (event.key === campaignStorageKey || event.key === campaignUpdatedEventKey) {
-        void syncCampaignsFromServer();
+        const now = Date.now();
+        if ((now - lastCampaignSyncAtRef.current) >= 5000 && !syncCampaignsInFlightRef.current) {
+          void syncCampaignsFromServer();
+        }
       }
 
       if (event.key === adminSessionKey) {
@@ -1470,6 +1521,14 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
     window.localStorage.setItem(pendingPaymentsKey, JSON.stringify(pendingPayments));
   }, [pendingPayments]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    saveDeletedUserEmailsToStorage(deletedUserEmails);
+  }, [deletedUserEmails]);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -1669,7 +1728,8 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       window.localStorage.setItem(registeredUsersKey, JSON.stringify(nextUsers));
     }
 
-    setDeletedUserEmails((prev) => prev.filter((email) => email !== deletedUserUndoState.email));
+    const nextDeletedEmails = deletedUserEmails.filter((email) => email !== deletedUserUndoState.email);
+    setDeletedUserEmails(nextDeletedEmails);
     setCampaigns((prev) => {
       const existingIds = new Set(prev.map((campaign) => campaign.id));
       const restoredCampaigns = deletedUserUndoState.removedCampaigns.filter((campaign) => !existingIds.has(campaign.id));
@@ -2421,7 +2481,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
             const filteredUsers = registeredUsers.filter((account) => account.email !== email);
             setRegisteredUsers(filteredUsers);
             window.localStorage.setItem(registeredUsersKey, JSON.stringify(filteredUsers));
-            setDeletedUserEmails((prev) => (prev.includes(email) ? prev : [...prev, email]));
+            const nextDeletedEmails = deletedUserEmails.includes(email) ? deletedUserEmails : [...deletedUserEmails, email];
+            setDeletedUserEmails(nextDeletedEmails);
+            saveDeletedUserEmailsToStorage(nextDeletedEmails);
             setCampaigns((prev) => prev.filter((campaign) => campaign.creatorEmail !== email));
             startDeletedUserUndo(email, deletedUser, removedCampaigns);
           }}
