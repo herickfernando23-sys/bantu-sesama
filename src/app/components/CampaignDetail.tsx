@@ -435,16 +435,19 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
       return;
     }
 
-    const hasInvalidAllocations = editAllocations.some((item) => {
-      const hasAnyValue = item.name.trim() || item.value.trim() || item.color.trim();
-      const amount = parseCurrencyValue(item.value);
-      const isValid = item.name.trim() && Number.isFinite(amount) && amount > 0;
-      return hasAnyValue && !isValid;
-    });
+    const hasAnyAllocationNameFilled = editAllocations.some((item) => item.name.trim());
+    if (hasAnyAllocationNameFilled) {
+      const hasInvalidAllocations = editAllocations.some((item) => {
+        const hasAnyValue = item.name.trim() || item.value.trim() || item.color.trim();
+        const amount = parseCurrencyValue(item.value);
+        const isValid = item.name.trim() && Number.isFinite(amount) && amount > 0;
+        return hasAnyValue && !isValid;
+      });
 
-    if (hasInvalidAllocations) {
-      showEditError('Semua baris alokasi harus lengkap: nama alokasi dan nominal yang valid.');
-      return;
+      if (hasInvalidAllocations) {
+        showEditError('Semua baris alokasi harus lengkap: nama alokasi dan nominal yang valid.');
+        return;
+      }
     }
 
     const hasInvalidDisbursements = editDisbursements.some((item) => {
