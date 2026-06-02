@@ -239,15 +239,26 @@ const getRecurringDonationForEmail = (email?: string | null) => {
   return loadRecurringDonationsFromStorage().find((record) => record.email.toLowerCase() === email.toLowerCase()) ?? null;
 };
 
-const buildCampaignFingerprint = (campaign: CampaignRecord) => [
-  campaign.title.trim().toLowerCase(),
-  campaign.description.trim().toLowerCase(),
-  campaign.location.trim().toLowerCase(),
-  String(campaign.target),
-  (campaign.creatorEmail || '').trim().toLowerCase(),
-  (campaign.organizer || '').trim().toLowerCase(),
-  campaign.category.trim().toLowerCase(),
-].join('|');
+const safeStringValue = (value?: string | null) => String(value ?? '').trim().toLowerCase();
+
+const buildCampaignFingerprint = (campaign: CampaignRecord) => {
+  const fingerprint = [
+    safeStringValue(campaign.title),
+    safeStringValue(campaign.description),
+    safeStringValue(campaign.location),
+    String(campaign.target),
+    safeStringValue(campaign.creatorEmail),
+    safeStringValue(campaign.organizer),
+    safeStringValue(campaign.category),
+  ].join('|');
+
+  // If all text fields are missing or empty, fall back to id-based fingerprint
+  if (!fingerprint.replace(/\|/g, '')) {
+    return `id:${campaign.id}`;
+  }
+
+  return fingerprint;
+};
 
 const migrateLegacyCampaignId = (campaign: CampaignRecord): CampaignRecord => {
   const nextId = legacyCampaignIdMap[campaign.id];
@@ -273,6 +284,11 @@ const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
 const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => ({
   ...migrateLegacyCampaignId(campaign),
   createdAt: campaign.createdAt ?? Date.now(),
+  title: campaign.title || '',
+  description: campaign.description || '',
+  location: campaign.location || '',
+  category: campaign.category || '',
+  organizer: campaign.organizer || '',
   fullDescription: campaign.fullDescription || campaign.story || campaign.description || '',
   story: campaign.story || campaign.fullDescription || campaign.description || '',
   image: campaign.image || '',
@@ -986,17 +1002,26 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
   useEffect(() => {
     const storedCampaigns = loadCampaignsFromStorage();
-    if (storedCampaigns && storedCampaigns.length > 0) {
-      const apiBase = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
-      const originalImagesFor1to6: Record<number, string> = {
-        1: 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-        2: 'https://images.unsplash.com/photo-1774370793502-85098cd3fd00?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwyfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-        3: 'https://images.unsplash.com/photo-1762592957827-99db60cfd0c7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cmFkaXRpb25hbCUyMG1hcmtldCUyMGZvb2QlMjB2ZW5kb3J8ZW58MXx8fHwxNzc3NTMyOTM3fDA&ixlib=rb-4.1.0&q=80&w=1080',
-        4: 'https://images.unsplash.com/photo-1768637758036-9a690925ae72?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw0fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-        5: 'https://images.unsplash.com/photo-1757763006278-d0fa5d582d0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-        6: 'https://images.unsplash.com/photo-1767678233351-9308d8220fa5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw1fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080'
-      };
+    const apiBase = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
+    const originalImagesFor1to6: Record<number, string> = {
+      1: 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      2: 'https://images.unsplash.com/photo-1774370793502-85098cd3fd00?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwyfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      3: 'https://images.unsplash.com/photo-1762592957827-99db60cfd0c7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cmFkaXRpb25hbCUyMG1hcmtldCUyMGZvb2QlMjB2ZW5kb3J8ZW58MXx8fHwxNzc3NTMyOTM3fDA&ixlib=rb-4.1.0&q=80&w=1080',
+      4: 'https://images.unsplash.com/photo-1768637758036-9a690925ae72?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw0fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      5: 'https://images.unsplash.com/photo-1757763006278-d0fa5d582d0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      6: 'https://images.unsplash.com/photo-1767678233351-9308d8220fa5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw1fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080'
+    };
 
+    const isPublicCampaign = (campaign: CampaignRecord) => campaign.status !== 'pending' && campaign.status !== 'rejected';
+    const shouldIgnoreStoredCampaigns = (stored: CampaignRecord[]) => {
+      if (stored.length > 200) {
+        return true;
+      }
+      const visible = stored.filter(isPublicCampaign);
+      return visible.length === 0;
+    };
+
+    if (storedCampaigns && storedCampaigns.length > 0) {
       const cleanedCampaigns = dedupeCampaigns(storedCampaigns).map((c) => {
         // restore original images for campaigns 1-6 to avoid accidental proxying or broken URLs
         if (c && typeof c.id === 'number' && originalImagesFor1to6[c.id]) {
@@ -1025,8 +1050,14 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
         return c;
       });
 
-      setCampaigns(cleanedCampaigns);
-      window.localStorage.setItem(campaignStorageKey, JSON.stringify(cleanedCampaigns));
+      if (shouldIgnoreStoredCampaigns(cleanedCampaigns)) {
+        window.localStorage.removeItem(campaignStorageKey);
+      } else if (cleanedCampaigns.length > 0) {
+        setCampaigns(cleanedCampaigns);
+        window.localStorage.setItem(campaignStorageKey, JSON.stringify(cleanedCampaigns));
+      }
+    } else {
+      window.localStorage.setItem(campaignStorageKey, JSON.stringify(campaigns));
     }
 
     setCampaignsHydrated(true);

@@ -1,10 +1,44 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, CreditCard, Check, Calendar, Loader, Clock3, RefreshCw, ExternalLink } from 'lucide-react';
 
-const apiBaseUrl = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
+function resolveApiBaseUrl() {
+  const envBaseUrl = String((import.meta as any).env?.VITE_API_URL || '').trim();
+
+  if (envBaseUrl) {
+    return envBaseUrl.replace(/\/$/, '');
+  }
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin.replace(/\/$/, '');
+  }
+
+  return 'http://localhost:4000';
+}
+
+const apiBaseUrl = resolveApiBaseUrl();
 const midtransClientKey = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_CLIENT_KEY) || '').trim();
 const viteMidtransIsProduction = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_IS_PRODUCTION) || '').toLowerCase() === 'true';
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+const mapToPaymentErrorMessage = (err: unknown, fallbackMessage: string) => {
+  const rawMessage = err instanceof Error ? String(err.message || '') : String(err || '');
+  const normalized = rawMessage.trim().toLowerCase();
+
+  if (!normalized) {
+    return fallbackMessage;
+  }
+
+  if (
+    normalized.includes('failed to fetch')
+    || normalized.includes('networkerror')
+    || normalized.includes('network request failed')
+    || normalized.includes('load failed')
+  ) {
+    return 'Koneksi ke server pembayaran gagal. Periksa koneksi internet atau konfigurasi API, lalu coba lagi.';
+  }
+
+  return rawMessage;
+};
 
 // Log env vars for debugging
 console.log('[PaymentModal] Env vars loaded:', {
@@ -470,7 +504,7 @@ export function PaymentModal({
 
       setPendingMessage('Pembayaran masih pending. Silakan selesaikan pembayaran di channel yang dipilih lalu cek lagi beberapa saat lagi.');
     } catch (err) {
-      safeSetError(err instanceof Error ? err.message : 'Gagal mengecek status pembayaran');
+      safeSetError(mapToPaymentErrorMessage(err, 'Gagal mengecek status pembayaran'));
     } finally {
       setCheckingStatus(false);
       // stop suppressing errors shortly after check completes
@@ -514,7 +548,7 @@ export function PaymentModal({
       setStep('error');
       safeSetError('Pembayaran telah dibatalkan.');
     } catch (err) {
-      safeSetError(err instanceof Error ? err.message : 'Gagal membatalkan pembayaran');
+      safeSetError(mapToPaymentErrorMessage(err, 'Gagal membatalkan pembayaran'));
     } finally {
       setCheckingStatus(false);
     }
@@ -739,7 +773,7 @@ export function PaymentModal({
       const donationAmount = Number(amount);
       completeSuccessfulPayment(donationAmount, `Donasi Rp ${donationAmount.toLocaleString('id-ID')} berhasil diproses (metode: ${paymentMethod})`);
     } catch (err) {
-      safeSetError(err instanceof Error ? err.message : 'Pembayaran gagal');
+      safeSetError(mapToPaymentErrorMessage(err, 'Pembayaran gagal'));
     } finally {
       setLoading(false);
     }

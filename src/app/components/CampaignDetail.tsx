@@ -1,7 +1,7 @@
 import { ImageWithFallback } from './ImageWithFallback';
 import { MapPin, Users, Calendar, Share2, Heart, TrendingUp, Shield, FileText, Facebook, Twitter, Send, Mail, Link2, MessageCircle } from 'lucide-react';
 import { TransparencyChart } from './TransparencyChart';
-import { useEffect, useMemo, useState, useRef } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { PaymentModal } from './PaymentModal';
 
 interface Campaign {
@@ -166,53 +166,6 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   const [withdrawNote, setWithdrawNote] = useState('');
   const [withdrawError, setWithdrawError] = useState('');
   
-  // Generate mock data berbeda untuk setiap campaign berdasarkan campaign ID
-  const generateMockDonations = (campaignId: number) => {
-    // Only generate if campaign has donors
-    if (campaign.donors === 0) {
-      return [];
-    }
-    
-    const donors = [
-      'Siti Nurhaliza', 'Bambang Wijaya', 'Rina Sutrisno', 'Ahmad Suryanto', 'Dewi Lestari',
-      'Rudi Hartono', 'Sinta Paramita', 'Doni Pratama', 'Ratna Wijaya', 'Hendri Kusuma',
-      'Anita Soeharto', 'Budi Santoso', 'Citra Dewi', 'Eka Putra', 'Farah Nabila'
-    ];
-    const messages = [
-      'Semoga bisa membantu', 'Perjuangan membutuhkan dukungan', 'Semoga berkah dan lancar',
-      'Semangat terus!', 'Semoga lancar selalu', 'Bangkit dan berkembang', 'Untuk masa depan yang lebih baik',
-      'Doa dan dukungan bersama'
-    ];
-    
-    // Use campaign ID as seed untuk generate different data per campaign
-    let seed = campaignId;
-    const seededRandom = () => {
-      seed = (seed * 9301 + 49297) % 233280;
-      return seed / 233280;
-    };
-    
-    const mockCount = Math.floor(seededRandom() * 5) + 5; // 5-9 mock donors
-    const mockData = [];
-    
-    for (let i = 0; i < mockCount; i++) {
-      const donorIdx = Math.floor(seededRandom() * donors.length);
-      const messageIdx = Math.floor(seededRandom() * (messages.length + 1));
-      const amount = (Math.floor(seededRandom() * 15) + 1) * 100000; // Rp 100k - 1.5jt
-      const hoursAgo = Math.floor(seededRandom() * 72) + 1; // 1-72 jam lalu
-      
-      mockData.push({
-        name: donors[donorIdx],
-        amount: amount,
-        message: messageIdx < messages.length ? messages[messageIdx] : '',
-        timestamp: Date.now() - hoursAgo * 60 * 60 * 1000
-      });
-    }
-    
-    return mockData;
-  };
-  
-  const mockDonations = useMemo(() => generateMockDonations(campaign.id), [campaign.id, campaign.donors]);
-  
   const [fetchedDonations, setFetchedDonations] = useState<Array<{name: string; amount: number; message: string; timestamp: number}> | null>(null);
   const [loadingDonations, setLoadingDonations] = useState(false);
 
@@ -245,8 +198,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   };
   
   const donorEntries = (() => {
-    // Merge campaign.donations, fetchedDonations, and mockDonations so that
-    // real donations appended by user do not replace the mock donors.
+    // Merge donation data from local state and API result only.
     const combined: Array<{name: string; amount: number; message: string; timestamp: number}> = [];
 
     if (Array.isArray(campaign.donations) && campaign.donations.length > 0) {
@@ -254,9 +206,6 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
     }
     if (Array.isArray(fetchedDonations) && fetchedDonations.length > 0) {
       combined.push(...fetchedDonations);
-    }
-    if (Array.isArray(mockDonations) && mockDonations.length > 0) {
-      combined.push(...mockDonations);
     }
 
     if (combined.length === 0) return [];
@@ -341,7 +290,12 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
       if (campaign.donors > 0) {
         setLoadingDonations(true);
         (async () => {
-            const apiBaseUrl = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:8080').replace(/\/$/, '');
+            const envBaseUrl = String((import.meta as any).env?.VITE_API_URL || '').trim();
+            const apiBaseUrl = envBaseUrl
+              ? envBaseUrl.replace(/\/$/, '')
+              : (typeof window !== 'undefined' && window.location?.origin
+                ? window.location.origin.replace(/\/$/, '')
+                : 'http://localhost:8080');
           try {
             const res = await fetch(`${apiBaseUrl}/api/donations?campaignId=${campaign.id}`);
             if (!res.ok) {

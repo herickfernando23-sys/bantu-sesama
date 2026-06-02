@@ -1,10 +1,44 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ExternalLink, Loader, RefreshCw, ShieldAlert, CheckCircle2, Clock3, XCircle, Copy } from 'lucide-react';
 
-const apiBaseUrl = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:8080').replace(/\/$/, '');
+function resolveApiBaseUrl() {
+  const envBaseUrl = String((import.meta as any).env?.VITE_API_URL || '').trim();
+
+  if (envBaseUrl) {
+    return envBaseUrl.replace(/\/$/, '');
+  }
+
+  if (typeof window !== 'undefined' && window.location?.origin) {
+    return window.location.origin.replace(/\/$/, '');
+  }
+
+  return 'http://localhost:8080';
+}
+
+const apiBaseUrl = resolveApiBaseUrl();
 const midtransClientKey = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_CLIENT_KEY) || '').trim();
 const viteMidtransIsProduction = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_IS_PRODUCTION) || '').toLowerCase() === 'true';
 const pendingPaymentsKey = 'bantusesama-pending-payments';
+
+const mapToPaymentErrorMessage = (err: unknown, fallbackMessage: string) => {
+  const rawMessage = err instanceof Error ? String(err.message || '') : String(err || '');
+  const normalized = rawMessage.trim().toLowerCase();
+
+  if (!normalized) {
+    return fallbackMessage;
+  }
+
+  if (
+    normalized.includes('failed to fetch')
+    || normalized.includes('networkerror')
+    || normalized.includes('network request failed')
+    || normalized.includes('load failed')
+  ) {
+    return 'Koneksi ke server pembayaran gagal. Periksa koneksi internet atau konfigurasi API, lalu coba lagi.';
+  }
+
+  return rawMessage;
+};
 
 type PaymentStatusResponse = {
   status?: string;
@@ -129,7 +163,7 @@ export function ContinuePaymentPage({ onHome, user }: { onHome: () => void; user
         setMessage('Pembayaran masih pending. Silakan lanjutkan pembayaran di channel yang dipilih.');
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal mengambil status pembayaran');
+      setError(mapToPaymentErrorMessage(err, 'Gagal mengambil status pembayaran'));
     } finally {
       setLoading(false);
     }
@@ -196,7 +230,7 @@ export function ContinuePaymentPage({ onHome, user }: { onHome: () => void; user
                     throw new Error(body.error || 'Konfirmasi pembayaran gagal');
                   }
                 } catch (err) {
-                  setError(err instanceof Error ? err.message : 'Konfirmasi pembayaran gagal');
+                  setError(mapToPaymentErrorMessage(err, 'Konfirmasi pembayaran gagal'));
                 } finally {
                   setLoading(false);
                 }
@@ -286,7 +320,7 @@ export function ContinuePaymentPage({ onHome, user }: { onHome: () => void; user
       setMessage('Pembayaran berhasil dibatalkan.');
       removePendingPayment(query.donationId, query.orderId);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Gagal membatalkan pembayaran');
+      setError(mapToPaymentErrorMessage(err, 'Gagal membatalkan pembayaran'));
     } finally {
       setCanceling(false);
     }
