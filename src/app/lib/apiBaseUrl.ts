@@ -5,8 +5,11 @@ export function getApiBaseUrl() {
   }
   if (envBaseUrl) return envBaseUrl;
 
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    if (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') {
+  // Local dev fallback: when frontend is opened on localhost without VITE_API_URL,
+  // call backend directly on port 4000 so API requests still work even without Vite proxy.
+  if (typeof window !== 'undefined') {
+    const host = String(window.location.hostname || '').toLowerCase();
+    if (host === 'localhost' || host === '127.0.0.1') {
       return 'http://localhost:4000';
     }
   }

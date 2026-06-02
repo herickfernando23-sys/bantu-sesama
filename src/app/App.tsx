@@ -148,15 +148,6 @@ const legacyCampaignIdMap: Record<number, number> = {
   1006: 12
 };
 
-const campaignImageOverrides: Record<number, string> = {
-  7: 'https://images.unsplash.com/photo-1545731782-7ce02675a3e1?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHxwYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-  8: 'https://images.unsplash.com/photo-1643886024293-b5d3d6bf92b2?q=80&w=1025&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-  9: 'https://images.unsplash.com/photo-1457972657980-4c9fddebec8d?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-  10: 'https://images.unsplash.com/photo-1664192356009-3e8ed68d3d08?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-  11: 'https://images.unsplash.com/photo-1533900298318-6b8da08a523e?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-  12: 'https://images.unsplash.com/photo-1597129778410-0e4932adbd77?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'
-};
-
 const legacyPaginationMockTitles = new Set([
   'Baksop Ibu Lina Butuh Modal Baru',
   'Warung Nasi Pak Eko Perlu Perbaikan',
@@ -173,6 +164,39 @@ const legacyPaginationMockTitles = new Set([
   'Bantuan Modal Usaha Mikro',
   'Dukungan UMKM Lokal'
 ]);
+
+const seededDemoDonationsByCampaignId: Record<number, Array<{ name: string; amount: number; message: string; timestamp: number }>> = {
+  1: [
+    { name: 'Rafi Pratama', amount: 250000, message: 'Semoga warung Bu Siti cepat pulih.', timestamp: 1718835600000 },
+    { name: 'Nadia Lestari', amount: 500000, message: 'Titip doa dari Bandung.', timestamp: 1718922000000 },
+    { name: 'Komunitas Kuliner Jaktim', amount: 1000000, message: 'Dukungan untuk UMKM lokal.', timestamp: 1719008400000 }
+  ],
+  2: [
+    { name: 'Dian Saputra', amount: 300000, message: 'Semoga para pedagang segera bangkit.', timestamp: 1719094800000 },
+    { name: 'Salsa Maharani', amount: 450000, message: 'Bersama kita pulihkan pasar.', timestamp: 1719181200000 },
+    { name: 'Arif Wibowo', amount: 750000, message: '', timestamp: 1719267600000 }
+  ],
+  3: [
+    { name: 'Reno Maulana', amount: 200000, message: 'Semangat terus Pak Joko.', timestamp: 1719354000000 },
+    { name: 'Yuni Kartika', amount: 350000, message: 'Semoga jualan sate lancar lagi.', timestamp: 1719440400000 },
+    { name: 'Bima Nugraha', amount: 500000, message: '', timestamp: 1719526800000 }
+  ],
+  4: [
+    { name: 'Ica Permata', amount: 150000, message: 'Semoga Ibu Ani segera bisa terima order lagi.', timestamp: 1719613200000 },
+    { name: 'Tegar Ananda', amount: 300000, message: '', timestamp: 1719699600000 },
+    { name: 'Lina Kusuma', amount: 450000, message: 'Semoga usaha jahitnya makin maju.', timestamp: 1719786000000 }
+  ],
+  5: [
+    { name: 'Fajar Rahman', amount: 250000, message: 'Semoga warung kopi cepat buka kembali.', timestamp: 1719872400000 },
+    { name: 'Wulan Sari', amount: 400000, message: 'Dukungan untuk Mas Budi.', timestamp: 1719958800000 },
+    { name: 'Yoga Firmansyah', amount: 600000, message: '', timestamp: 1720045200000 }
+  ],
+  6: [
+    { name: 'Putri Azzahra', amount: 200000, message: 'Semoga Bu Wati segera bisa jualan lagi.', timestamp: 1720131600000 },
+    { name: 'Dimas Prakoso', amount: 350000, message: '', timestamp: 1720218000000 },
+    { name: 'Naufal Hadi', amount: 500000, message: 'Semoga lancar rezekinya.', timestamp: 1720304400000 }
+  ]
+};
 
 const loadRegisteredUsersFromStorage = () => {
   if (typeof window === 'undefined') {
@@ -276,7 +300,11 @@ const loadHiddenDemoCampaignIdsFromStorage = () => {
   try {
     const raw = window.localStorage.getItem(hiddenDemoCampaignIdsKey);
     const parsed = raw ? (JSON.parse(raw) as number[]) : [];
-    return Array.isArray(parsed) ? parsed.filter((id) => Number.isFinite(id) && id > 0) : [];
+    // Only keep legacy/mock campaign IDs in high numeric range.
+    // Real campaigns (including seeded 1..6) must never be hidden by this flag.
+    return Array.isArray(parsed)
+      ? parsed.filter((id) => Number.isFinite(id) && id >= 1000)
+      : [];
   } catch {
     return [] as number[];
   }
@@ -302,28 +330,6 @@ const getRecurringDonationForEmail = (email?: string | null) => {
   return loadRecurringDonationsFromStorage().find((record) => record.email.toLowerCase() === email.toLowerCase()) ?? null;
 };
 
-<<<<<<< HEAD
-const safeStringValue = (value?: string | null) => String(value ?? '').trim().toLowerCase();
-
-const buildCampaignFingerprint = (campaign: CampaignRecord) => {
-  const fingerprint = [
-    safeStringValue(campaign.title),
-    safeStringValue(campaign.description),
-    safeStringValue(campaign.location),
-    String(campaign.target),
-    safeStringValue(campaign.creatorEmail),
-    safeStringValue(campaign.organizer),
-    safeStringValue(campaign.category),
-  ].join('|');
-
-  // If all text fields are missing or empty, fall back to id-based fingerprint
-  if (!fingerprint.replace(/\|/g, '')) {
-    return `id:${campaign.id}`;
-  }
-
-  return fingerprint;
-};
-=======
 const buildCampaignFingerprint = (campaign: CampaignRecord) => [
   normalizeKeyText(campaign.title),
   normalizeKeyText(campaign.location),
@@ -331,7 +337,6 @@ const buildCampaignFingerprint = (campaign: CampaignRecord) => [
   normalizeKeyText(campaign.organizer),
   normalizeKeyText(campaign.category),
 ].join('|');
->>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
 
 const migrateLegacyCampaignId = (campaign: CampaignRecord): CampaignRecord => {
   const nextId = legacyCampaignIdMap[campaign.id];
@@ -375,6 +380,8 @@ const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
 const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   const rawTarget = toSafeNumber((campaign as CampaignRecord & { target?: number | string }).target, 0);
   const rawGoal = toSafeNumber((campaign as CampaignRecord & { goal?: number | string }).goal, 0);
+  const normalizedDonations = Array.isArray(campaign.donations) ? campaign.donations : [];
+  const hasExplicitDonorCount = campaign.donors !== undefined && campaign.donors !== null;
   
   let normalizedTarget = Math.max(0, rawTarget > 0 ? rawTarget : rawGoal);
   if (normalizedTarget === 0) {
@@ -383,28 +390,32 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   
   const normalizedCollected = Math.max(0, toSafeNumber(campaign.collected, 0));
   const normalizedDonors = Math.max(0, toSafeNumber(campaign.donors, 0));
+  const derivedDonors = normalizedDonations.length > 0 ? normalizedDonations.length : normalizedDonors;
+  const finalDonors = hasExplicitDonorCount
+    ? Math.max(normalizedDonors, normalizedDonations.length)
+    : derivedDonors;
   const isSeedDemoCampaign = Number.isFinite(campaign.id) && campaign.id > 0 && campaign.id <= 6;
-  const correctedCollected = normalizedDonors === 0 && normalizedCollected > 0 && !isSeedDemoCampaign
+  const correctedCollected = hasExplicitDonorCount && finalDonors === 0 && normalizedCollected > 0 && !isSeedDemoCampaign
     ? 0
     : normalizedCollected;
 
   const migratedCampaign = migrateLegacyCampaignId(campaign);
   const normalizedId = Number(migratedCampaign.id);
+  const seededDonations = seededDemoDonationsByCampaignId[normalizedId] || [];
+  const baseStatus = (campaign.status ?? 'pending') as CampaignStatus;
+  const hasFundraisingProgress = correctedCollected > 0 || finalDonors > 0;
+  const inferredStatus: CampaignStatus = baseStatus === 'rejected'
+    ? 'rejected'
+    : (Number.isFinite(campaign.id) && campaign.id > 0 && campaign.id <= 6)
+      ? 'verified'
+      : hasFundraisingProgress
+        ? 'verified'
+        : baseStatus;
 
   return ({
   ...migratedCampaign,
   id: Number.isFinite(normalizedId) && normalizedId > 0 ? normalizedId : 0,
   createdAt: campaign.createdAt ?? Date.now(),
-<<<<<<< HEAD
-  title: campaign.title || '',
-  description: campaign.description || '',
-  location: campaign.location || '',
-  category: campaign.category || '',
-  organizer: campaign.organizer || '',
-  fullDescription: campaign.fullDescription || campaign.story || campaign.description || '',
-  story: campaign.story || campaign.fullDescription || campaign.description || '',
-  image: campaign.image || '',
-=======
   title: stripMarkdownHeading(campaign.title),
   description: stripMarkdownHeading(campaign.description),
   fullDescription: toSafeText(campaign.fullDescription || campaign.story || campaign.description),
@@ -417,15 +428,14 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   goal: rawGoal,
   target: normalizedTarget,
   collected: correctedCollected,
-  donors: normalizedDonors,
+  donors: finalDonors,
   daysLeft: Math.max(0, toSafeNumber(campaign.daysLeft, 0)),
-  status: Number.isFinite(campaign.id) && campaign.id > 0 && campaign.id <= 6
-    ? (campaign.status === 'rejected' ? 'rejected' : 'verified')
-    : (campaign.status ?? 'pending'),
->>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
+  status: inferredStatus,
   fundAllocation: Array.isArray(campaign.fundAllocation) ? campaign.fundAllocation : [],
   disbursementHistory: Array.isArray(campaign.disbursementHistory) ? campaign.disbursementHistory : [],
-  donations: Array.isArray(campaign.donations) ? campaign.donations : []
+  donations: normalizedDonations.length > 0
+    ? normalizedDonations
+    : seededDonations.map((donation) => ({ ...donation }))
 });
 };
 
@@ -606,7 +616,11 @@ export default function App() {
       }
 
       const parsed = JSON.parse(raw) as CampaignRecord[];
-      return Array.isArray(parsed) ? parsed.map(normalizeCampaignRecord) : null;
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        return null;
+      }
+
+      return parsed.map(normalizeCampaignRecord);
     } catch {
       return null;
     }
@@ -666,7 +680,38 @@ export default function App() {
         && campaign.status !== 'rejected'
       ));
 
+      // Preserve the original seeded campaigns (IDs 1..6) from local state so
+      // they don't disappear when backend currently returns only newly added rows.
+      const preservedSeedCampaigns = campaigns.filter((campaign) => (
+        campaign.id >= 1
+        && campaign.id <= 6
+        && campaign.status !== 'rejected'
+        && !hiddenDemoIds.has(campaign.id)
+      ));
+
+      if (preservedSeedCampaigns.length > 0) {
+        remoteCampaigns = dedupeCampaigns([...remoteCampaigns, ...preservedSeedCampaigns]);
+      }
+
       if (cancelledRef?.current) {
+        return false;
+      }
+
+      if (remoteCampaigns.length === 0) {
+        // Keep existing campaigns when server temporarily returns an empty list
+        // to avoid UI flicker (appears then disappears) during intermittent sync.
+        console.warn('[CampaignSync] Ignoring empty campaign sync result to preserve current list');
+        return false;
+      }
+
+      const hasPublicCampaign = remoteCampaigns.some((campaign) => (
+        campaign.status !== 'pending' && campaign.status !== 'rejected'
+      ));
+
+      if (page !== 'admin' && !hasPublicCampaign) {
+        // Public page hides pending/rejected campaigns. If server only returns those,
+        // keep current visible list instead of replacing it with an apparently empty UI.
+        console.warn('[CampaignSync] Ignoring non-public-only sync result on public page');
         return false;
       }
 
@@ -707,10 +752,6 @@ export default function App() {
       .map((campaign) => {
       if (campaign && typeof campaign.id === 'number' && originalImagesFor1to6[campaign.id]) {
         return { ...campaign, image: originalImagesFor1to6[campaign.id] };
-      }
-
-      if (campaign && typeof campaign.id === 'number' && campaignImageOverrides[campaign.id]) {
-        return { ...campaign, image: campaignImageOverrides[campaign.id] };
       }
 
       try {
@@ -1188,7 +1229,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           ))
         : null;
 
-      if (!cancelled && localCampaigns !== null) {
+      const shouldPrioritizeServerForAdmin = page === 'admin' && Boolean(adminUser);
+
+      if (!cancelled && !shouldPrioritizeServerForAdmin && localCampaigns !== null && localCampaigns.length > 0) {
         setCampaigns(localCampaigns);
       }
 
@@ -1197,7 +1240,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       }
 
       const synced = await syncCampaignsFromServer({ current: cancelled });
-      if (!cancelled && !synced && localCampaigns !== null) {
+      if (!cancelled && !synced && localCampaigns !== null && localCampaigns.length > 0) {
         setCampaigns(localCampaigns);
       }
     })();
@@ -1208,34 +1251,6 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   }, []);
 
   useEffect(() => {
-<<<<<<< HEAD
-    const storedCampaigns = loadCampaignsFromStorage();
-    const apiBase = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
-    const originalImagesFor1to6: Record<number, string> = {
-      1: 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-      2: 'https://images.unsplash.com/photo-1774370793502-85098cd3fd00?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwyfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-      3: 'https://images.unsplash.com/photo-1762592957827-99db60cfd0c7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cmFkaXRpb25hbCUyMG1hcmtldCUyMGZvb2QlMjB2ZW5kb3J8ZW58MXx8fHwxNzc3NTMyOTM3fDA&ixlib=rb-4.1.0&q=80&w=1080',
-      4: 'https://images.unsplash.com/photo-1768637758036-9a690925ae72?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw0fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-      5: 'https://images.unsplash.com/photo-1757763006278-d0fa5d582d0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
-      6: 'https://images.unsplash.com/photo-1767678233351-9308d8220fa5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw1fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080'
-    };
-
-    const isPublicCampaign = (campaign: CampaignRecord) => campaign.status !== 'pending' && campaign.status !== 'rejected';
-    const shouldIgnoreStoredCampaigns = (stored: CampaignRecord[]) => {
-      if (stored.length > 200) {
-        return true;
-      }
-      const visible = stored.filter(isPublicCampaign);
-      return visible.length === 0;
-    };
-
-    if (storedCampaigns && storedCampaigns.length > 0) {
-      const cleanedCampaigns = dedupeCampaigns(storedCampaigns).map((c) => {
-        // restore original images for campaigns 1-6 to avoid accidental proxying or broken URLs
-        if (c && typeof c.id === 'number' && originalImagesFor1to6[c.id]) {
-          return { ...c, image: originalImagesFor1to6[c.id] };
-        }
-=======
     const handleVisibilitySync = () => {
       if (document.visibilityState === 'visible') {
         void syncCampaignsFromServer();
@@ -1245,7 +1260,6 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     const handleFocusSync = () => {
       void syncCampaignsFromServer();
     };
->>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
 
     const intervalId = window.setInterval(() => {
       if (document.visibilityState === 'visible') {
@@ -1256,28 +1270,11 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     window.addEventListener('focus', handleFocusSync);
     document.addEventListener('visibilitychange', handleVisibilitySync);
 
-<<<<<<< HEAD
-        return c;
-      });
-
-      if (shouldIgnoreStoredCampaigns(cleanedCampaigns)) {
-        window.localStorage.removeItem(campaignStorageKey);
-      } else if (cleanedCampaigns.length > 0) {
-        setCampaigns(cleanedCampaigns);
-        window.localStorage.setItem(campaignStorageKey, JSON.stringify(cleanedCampaigns));
-      }
-    } else {
-      window.localStorage.setItem(campaignStorageKey, JSON.stringify(campaigns));
-    }
-
-    setCampaignsHydrated(true);
-=======
     return () => {
       window.removeEventListener('focus', handleFocusSync);
       document.removeEventListener('visibilitychange', handleVisibilitySync);
       window.clearInterval(intervalId);
     };
->>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
   }, []);
 
   // Sync campaigns from server when entering admin page
@@ -1719,17 +1716,42 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       )));
 
       if (withdrawal) {
-        // If changing to Success, decrease collected amount
+        // If changing to Success, call backend to persist and decrease collected amount
         if (status === 'Success' && previousStatus !== 'Success') {
-          setCampaigns((prev) =>
-            prev.map((campaign) =>
-              campaign.id === withdrawal.campaignId
-                ? { ...campaign, collected: Math.max(0, campaign.collected - withdrawal.amount) }
-                : campaign
-            )
-          );
+          (async () => {
+            try {
+              const res = await fetch(apiUrl(`/api/admin/withdrawals/${requestId}/approve`), {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ campaignId: withdrawal.campaignId, amount: withdrawal.amount, note: withdrawal.note })
+              });
+
+              if (!res.ok) {
+                console.error('Approve withdrawal failed', await res.text());
+                // revert local status change
+                setWithdrawalRequests((prev) => prev.map((req) => req.id === requestId ? { ...req, status: previousStatus || 'Pending' } : req));
+                return;
+              }
+
+              const data = await res.json();
+              if (data && data.campaign) {
+                // update campaigns from server response
+                setCampaigns((prev) => prev.map((c) => c.id === data.campaign.id ? ({ ...c, ...data.campaign }) : c));
+              } else {
+                // fallback local update
+                setCampaigns((prev) => prev.map((campaign) =>
+                  campaign.id === withdrawal.campaignId
+                    ? { ...campaign, collected: Math.max(0, campaign.collected - withdrawal.amount) }
+                    : campaign
+                ));
+              }
+            } catch (err) {
+              console.error('Failed to call approve endpoint', err);
+              setWithdrawalRequests((prev) => prev.map((req) => req.id === requestId ? { ...req, status: previousStatus || 'Pending' } : req));
+            }
+          })();
         }
-        // If changing to Rejected from Success, return the amount
+        // If changing to Rejected from Success, return the amount locally (no backend action)
         else if (status === 'Rejected' && previousStatus === 'Success') {
           setCampaigns((prev) =>
             prev.map((campaign) =>
@@ -1847,15 +1869,17 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
   }, [page]);
 
-  const selectedCampaignData = selectedCampaignSource === 'snapshot' && selectedCampaignSnapshotRef.current?.id === selectedCampaign
+  const selectedCampaignData = selectedCampaignSource === 'snapshot'
+    && selectedCampaignSnapshotRef.current?.id === selectedCampaign
+    && Boolean((selectedCampaignSnapshotRef.current as any)?.localOnly)
     ? selectedCampaignSnapshotRef.current
     : campaigns.find(c => c.id === selectedCampaign) ?? (selectedCampaignSnapshotRef.current?.id === selectedCampaign ? selectedCampaignSnapshotRef.current : null);
 
   useEffect(() => {
-    if (selectedCampaignData) {
+    if (selectedCampaign) {
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-  }, [selectedCampaignData]);
+  }, [selectedCampaign]);
 
   useEffect(() => {
     setProfileEditName(user?.name ?? '');
@@ -1942,12 +1966,37 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
             createWithdrawalRequest(campaignId, request.amount, request.note, user.name, user.email);
           }}
-          onUpdateCampaign={(campaignId, updates) => {
+          onUpdateCampaign={async (campaignId, updates) => {
+            const response = await fetch(apiUrl(`/api/campaigns/${campaignId}`), {
+              method: 'PATCH',
+              headers: {
+                'Content-Type': 'application/json',
+                Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+              },
+              body: JSON.stringify({
+                ...updates,
+                creatorEmail: user?.email || updates.creatorEmail || selectedCampaignData.creatorEmail || ''
+              })
+            });
+
+            if (!response.ok) {
+              const body = await response.json().catch(() => ({}));
+              throw new Error(body.error || 'Gagal menyimpan perubahan kampanye');
+            }
+
+            const updatedCampaign = normalizeCampaignRecord(await response.json());
+
             setCampaigns((prev) => prev.map((campaign) => (
-              campaign.id === campaignId ? ({ ...campaign, ...updates } as CampaignRecord) : campaign
+              campaign.id === campaignId ? ({ ...campaign, ...updatedCampaign, ...updates } as CampaignRecord) : campaign
             )));
+
+            selectedCampaignSnapshotRef.current = null;
+            setSelectedCampaignSource('id');
+            void syncCampaignsFromServer();
           }}
           onDonationSuccess={(amount, donorInfo) => {
+            selectedCampaignSnapshotRef.current = null;
+            setSelectedCampaignSource('id');
             setCampaigns((prev) => prev.map((campaign) => (
               campaign.id === selectedCampaignData.id
                 ? {
@@ -1967,6 +2016,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                   }
                 : campaign
             )));
+            void syncCampaignsFromServer();
           }}
           onNavigateToContinuePayment={openPendingPayment}
         />
@@ -2043,10 +2093,12 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                 donations: Array.isArray(c.donations) ? c.donations : []
               };
 
-              selectedCampaignSnapshotRef.current = normalizedCampaign;
+              const useSnapshotSource = Boolean((c as any).localOnly);
+
+              selectedCampaignSnapshotRef.current = useSnapshotSource ? normalizedCampaign : null;
               setCampaigns((prev) => [...prev, normalizedCampaign]);
               setSelectedCampaign(normalizedCampaign.id);
-              setSelectedCampaignSource('snapshot');
+              setSelectedCampaignSource(useSnapshotSource ? 'snapshot' : 'id');
               setPage(null);
               window.history.pushState(
                 { view: 'campaign', campaignId: normalizedCampaign.id },
@@ -2262,7 +2314,31 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                 }
               } catch (err) {
                 console.error(err);
-                window.alert('Gagal memverifikasi kampanye. Coba lagi.');
+
+                // Fallback local update when backend is temporarily unreachable.
+                setCampaigns((prev) => {
+                  const next = prev.map((campaign) => (
+                    campaign.id === campaignId
+                      ? { ...campaign, status: 'verified' as CampaignStatus }
+                      : campaign
+                  ));
+
+                  try {
+                    window.localStorage.setItem(campaignStorageKey, JSON.stringify(next));
+                  } catch {
+                    // ignore write failures
+                  }
+
+                  return next;
+                });
+
+                try {
+                  window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
+                } catch {
+                  // ignore write failures
+                }
+
+                window.alert('Server belum merespons. Status kampanye disimpan lokal sebagai terverifikasi.');
               }
             })();
           }}
@@ -2271,9 +2347,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
             const nextHiddenRejectedIds = hiddenRejectedCampaignIds.includes(campaignId)
               ? hiddenRejectedCampaignIds
               : [...hiddenRejectedCampaignIds, campaignId];
-            const nextHiddenDemoIds = campaignId <= 6
-              ? (hiddenDemoCampaignIds.includes(campaignId) ? hiddenDemoCampaignIds : [...hiddenDemoCampaignIds, campaignId])
-              : hiddenDemoCampaignIds;
+            const nextHiddenDemoIds = hiddenDemoCampaignIds;
 
             void (async () => {
               try {
@@ -2291,11 +2365,6 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
                 setHiddenRejectedCampaignIds(nextHiddenRejectedIds);
                 saveHiddenRejectedCampaignIdsToStorage(nextHiddenRejectedIds);
-
-                if (campaignId <= 6) {
-                  setHiddenDemoCampaignIds(nextHiddenDemoIds);
-                  saveHiddenDemoCampaignIdsToStorage(nextHiddenDemoIds);
-                }
 
                 startRejectUndo(campaignId, previousCampaign);
 
@@ -2315,7 +2384,27 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                 }
               } catch (err) {
                 console.error('Error menolak kampanye:', err);
-                window.alert('Gagal menolak kampanye di server. Kampanye tetap ditampilkan sampai proses berhasil. Silakan coba lagi.');
+
+                // Fallback local reject so campaign does not reappear on refresh.
+                const nextCampaigns = campaigns.filter((campaign) => campaign.id !== campaignId);
+                setCampaigns(nextCampaigns);
+                try {
+                  window.localStorage.setItem(campaignStorageKey, JSON.stringify(nextCampaigns));
+                } catch {
+                  // ignore write failures
+                }
+
+                setHiddenRejectedCampaignIds(nextHiddenRejectedIds);
+                saveHiddenRejectedCampaignIdsToStorage(nextHiddenRejectedIds);
+                startRejectUndo(campaignId, previousCampaign);
+
+                try {
+                  window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
+                } catch {
+                  // ignore write failures
+                }
+
+                window.alert('Server belum merespons. Kampanye disembunyikan lokal sebagai ditolak.');
               }
             })();
           }}

@@ -14,6 +14,8 @@ module.exports = (sequelize) => {
     image: { type: DataTypes.TEXT },
     status: { type: DataTypes.STRING, defaultValue: 'pending' },
     daysLeft: { type: DataTypes.INTEGER, defaultValue: 30 },
-    fullDescription: { type: DataTypes.TEXT }
+    fullDescription: { type: DataTypes.TEXT },
+    fundAllocation: { type: DataTypes.JSON, defaultValue: [] },
+    disbursementHistory: { type: DataTypes.JSON, defaultValue: [] }
   });
 };

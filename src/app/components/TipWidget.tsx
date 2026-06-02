@@ -49,6 +49,7 @@ export function TipWidget({ user }: { user?: { name?: string; email?: string } |
   const [isAnonymous, setIsAnonymous] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const [info, setInfo] = useState('');
   const [success, setSuccess] = useState('');
   const paymentCompletionRef = useRef(false);
 
@@ -56,6 +57,7 @@ export function TipWidget({ user }: { user?: { name?: string; email?: string } |
 
   const handleTip = async () => {
     setError('');
+    setInfo('');
     setSuccess('');
     if (!donorName.trim() || !donorEmail.trim()) {
       setError('Nama dan email harus diisi');
@@ -87,29 +89,7 @@ export function TipWidget({ user }: { user?: { name?: string; email?: string } |
       const isDemoTransaction = Boolean(data.demoMode) || !midtransClientKey || String(data.transactionToken || '').startsWith('DEMO_');
 
       if (isDemoTransaction) {
-        try {
-          const confirmResp = await fetch(apiUrl('/api/payments/confirm'), {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              tipId: data.tipId,
-              orderId: data.orderId,
-              transactionStatus: 'settlement'
-            })
-          });
-
-          if (!confirmResp.ok) {
-            const text = await confirmResp.text().catch(() => null);
-            let body = {} as any;
-            try { body = text ? JSON.parse(text) : {}; } catch (e) { body = {}; }
-            const serverMsg = (body && body.error) || text || 'Gagal mencatat tip di server';
-            throw new Error(serverMsg);
-          }
-
-          setSuccess(`Terima kasih! Tips Rp ${numeric.toLocaleString('id-ID')} berhasil tercatat.`);
-        } catch (err) {
-          setError(err instanceof Error ? err.message : 'Gagal mencatat tip di server');
-        }
+        setInfo('Transaksi tip dibuat dalam mode demo. Status belum dianggap berhasil tanpa pembayaran nyata.');
         return;
       }
 
@@ -120,15 +100,47 @@ export function TipWidget({ user }: { user?: { name?: string; email?: string } |
         onSuccess: async (result: Record<string, any>) => {
           paymentCompletionRef.current = true;
           try {
-            await fetch(apiUrl('/api/payments/confirm'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipId: data.tipId, orderId: data.orderId, transactionStatus: String(result.transaction_status || '') }) });
-            setSuccess(`Terima kasih! Tips Rp ${numeric.toLocaleString('id-ID')} berhasil.`);
+            const confirmResp = await fetch(apiUrl('/api/payments/confirm'), {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                tipId: data.tipId,
+                orderId: data.orderId,
+                transactionStatus: String(result.transaction_status || '')
+              })
+            });
+
+            const text = await confirmResp.text().catch(() => null);
+            let body = {} as any;
+            try { body = text ? JSON.parse(text) : {}; } catch (e) { body = {}; }
+
+            if (!confirmResp.ok) {
+              const serverMsg = (body && body.error) || text || 'Konfirmasi pembayaran gagal';
+              throw new Error(serverMsg);
+            }
+
+            const paymentStatus = String(body?.paymentStatus || '').toLowerCase();
+            const isSucceeded = Boolean(body?.success) || paymentStatus === 'succeeded';
+            const isPending = paymentStatus === 'processing' || paymentStatus === 'pending';
+
+            if (isSucceeded) {
+              setSuccess(`Terima kasih! Tips Rp ${numeric.toLocaleString('id-ID')} berhasil tercatat.`);
+              return;
+            }
+
+            if (isPending) {
+              setInfo('Pembayaran tip masih pending. Silakan selesaikan pembayaran di channel yang dipilih.');
+              return;
+            }
+
+            setError('Status pembayaran belum berhasil. Silakan cek kembali beberapa saat lagi.');
           } catch (err) {
-            setError('Konfirmasi pembayaran gagal');
+            setError(err instanceof Error ? err.message : 'Konfirmasi pembayaran gagal');
           }
         },
         onPending: (result: Record<string, any>) => {
           paymentCompletionRef.current = true;
-          setSuccess('Pembayaran tip tercatat sebagai pending. Silakan selesaikan di channel pembayaran.');
+          setInfo('Pembayaran tip tercatat sebagai pending. Silakan selesaikan di channel pembayaran.');
         },
         onError: (res?: Record<string, any>) => {
           setError('Pembayaran gagal. Silakan coba lagi.');
@@ -167,6 +179,7 @@ export function TipWidget({ user }: { user?: { name?: string; email?: string } |
       </label>
 
       {error && <div className="mb-3 text-sm text-red-600">{error}</div>}
+      {info && <div className="mb-3 text-sm text-amber-700">{info}</div>}
       {success && <div className="mb-3 text-sm text-emerald-700">{success}</div>}
 
       <button onClick={handleTip} disabled={loading} className="w-full py-2 bg-blue-600 text-white rounded">

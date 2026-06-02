@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const midtransClient = require('midtrans-client');
+const { randomBytes } = require('crypto');
 const optionalAuth = require('../middleware/optionalAuth');
 const { sequelize } = require('../models');
 const { Donation, Campaign, User } = sequelize.models;
@@ -23,6 +24,12 @@ console.log('Midtrans config loaded:', {
 });
 
 const isDemoPaymentMode = String(process.env.PAYMENT_DEMO || '').toLowerCase() === 'true';
+
+const generateUniqueOrderId = (prefix, entityId) => {
+  const ts = Date.now();
+  const suffix = randomBytes(3).toString('hex');
+  return `${prefix}${entityId}-${ts}-${suffix}`;
+};
 
 /**
  * POST /api/payments/create-intent
@@ -99,6 +106,8 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
       message
     });
 
+    const orderId = generateUniqueOrderId('ORDER-', donation.id);
+
     // Create tip record if provided
     let tipRecord = null;
     const numericTip = Math.round(Number(tipAmount || 0));
@@ -119,12 +128,14 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
 
     if (isDemoPaymentMode) {
       // Demo mode untuk testing
+      donation.midtransTransactionId = orderId;
+      await donation.save();
       return res.json({
         transactionToken: `DEMO_TOKEN_${donation.id}_${Date.now()}`,
         transactionId: `demo_txn_${donation.id}`,
         donationId: donation.id,
         demoMode: true,
-        orderId: `ORDER-${donation.id}`
+        orderId
       });
     }
 
@@ -132,7 +143,7 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
     const numericAmount = Math.round(Number(amount));
     const numericTipAmount = Math.round(Number(tipAmount || 0));
     const transactionDetails = {
-      order_id: `ORDER-${donation.id}`,
+      order_id: orderId,
       gross_amount: numericAmount + numericTipAmount
     };
 
@@ -219,8 +230,6 @@ router.post('/create-intent', optionalAuth, async (req, res) => {
     }
 
     const transactionToken = transaction.token;
-    const orderId = `ORDER-${donation.id}`;
-
     if (!transactionToken) {
       console.error('[CreateIntent-59] ERROR: response.token is empty/falsy');
       throw new Error('Midtrans response invalid: no token returned');
@@ -284,13 +293,16 @@ router.post('/create-tip-intent', optionalAuth, async (req, res) => {
     const Tip = sequelize.models.Tip;
     tip = await Tip.create({ userId, amount: numericAmount, currency: 'IDR', paymentStatus: 'pending', paymentMethod, donorName: isAnonymous ? 'Anonymous' : donorName, donorEmail, isAnonymous, message });
 
-    const orderId = `ORDER-TIP-${tip.id}`;
-    const canUseMidtrans = !isDemoPaymentMode && midtransServerKey && midtransClientKey;
+    const orderId = generateUniqueOrderId('ORDER-TIP-', tip.id);
 
-    if (!canUseMidtrans) {
+    if (isDemoPaymentMode) {
       tip.midtransTransactionId = orderId;
       await tip.save();
       return res.json({ transactionToken: `DEMO_TIP_${tip.id}_${Date.now()}`, transactionId: `demo_tip_${tip.id}`, tipId: tip.id, demoMode: true, orderId });
+    }
+
+    if (!midtransServerKey || !midtransClientKey) {
+      return res.status(503).json({ error: 'Konfigurasi Midtrans belum lengkap. Hubungi admin.' });
     }
 
     const transactionDetails = { order_id: orderId, gross_amount: numericAmount };
@@ -317,18 +329,6 @@ router.post('/create-tip-intent', optionalAuth, async (req, res) => {
     res.json({ transactionToken, transactionId: tip.midtransTransactionId, tipId: tip.id, orderId, amount: numericAmount, demoMode: false });
   } catch (err) {
     console.error('create-tip-intent error', err);
-
-    try {
-      if (tip) {
-        const fallbackOrderId = `ORDER-TIP-${tip.id}`;
-        tip.midtransTransactionId = fallbackOrderId;
-        await tip.save();
-        return res.json({ transactionToken: `DEMO_TIP_${tip.id}_${Date.now()}`, transactionId: fallbackOrderId, tipId: tip.id, demoMode: true, orderId: fallbackOrderId });
-      }
-    } catch (fallbackErr) {
-      console.error('create-tip-intent fallback failed:', fallbackErr);
-    }
-
     res.status(500).json({ error: err.message || 'Failed to create tip intent' });
   }
 });
@@ -460,8 +460,12 @@ router.get('/status/:orderId', optionalAuth, async (req, res) => {
   try {
     const { orderId } = req.params;
 
-    // Extract donationId from orderId
-    const donationId = parseInt(orderId.replace('ORDER-', ''));
+    // Extract donationId from format ORDER-{donationId}-{ts}-{suffix}
+    const donationIdMatch = String(orderId).match(/^ORDER-(\d+)/);
+    const donationId = donationIdMatch ? Number(donationIdMatch[1]) : NaN;
+    if (!Number.isFinite(donationId)) {
+      return res.status(400).json({ error: 'Invalid orderId format' });
+    }
     const donation = await Donation.findByPk(donationId);
 
     if (!donation) {
@@ -566,8 +570,12 @@ router.post('/webhook', async (req, res) => {
     const orderId = notification.order_id;
     const transactionStatus = notification.transaction_status;
 
-    // Extract donationId
-    const donationId = parseInt(orderId.replace('ORDER-', ''));
+    // Extract donationId from format ORDER-{donationId}-{ts}-{suffix}
+    const donationIdMatch = String(orderId).match(/^ORDER-(\d+)/);
+    const donationId = donationIdMatch ? Number(donationIdMatch[1]) : NaN;
+    if (!Number.isFinite(donationId)) {
+      return res.status(400).json({ error: 'Invalid order_id format' });
+    }
     const donation = await Donation.findByPk(donationId);
 
     if (!donation) {

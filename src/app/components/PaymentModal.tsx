@@ -1,27 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, CreditCard, Check, Calendar, Loader, Clock3, RefreshCw, ExternalLink } from 'lucide-react';
-
-<<<<<<< HEAD
-function resolveApiBaseUrl() {
-  const envBaseUrl = String((import.meta as any).env?.VITE_API_URL || '').trim();
-
-  if (envBaseUrl) {
-    return envBaseUrl.replace(/\/$/, '');
-  }
-
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin.replace(/\/$/, '');
-  }
-
-  return 'http://localhost:4000';
-}
-
-const apiBaseUrl = resolveApiBaseUrl();
-=======
 import { apiUrl, getApiBaseUrl } from '../lib/apiBaseUrl';
 
 const apiBaseUrl = getApiBaseUrl();
->>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
 const midtransClientKey = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_CLIENT_KEY) || '').trim();
 const viteMidtransIsProduction = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_IS_PRODUCTION) || '').toLowerCase() === 'true';
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;

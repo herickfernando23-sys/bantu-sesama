@@ -76,38 +76,22 @@ interface AdminDashboardProps {
 }
 
 function TipsPanel() {
+  const tipsCacheKey = 'bantusesama-admin-tips-cache';
+  const loadTipsCache = () => {
+    try {
+      const raw = window.localStorage.getItem(tipsCacheKey);
+      const parsed = raw ? JSON.parse(raw) : [];
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  };
+
   const [tips, setTips] = useState<Array<any>>([]);
   const [loadingTips, setLoadingTips] = useState(false);
+  const [clearingTips, setClearingTips] = useState(false);
   const [errorTips, setErrorTips] = useState('');
   const [lastRefresh, setLastRefresh] = useState<number | null>(null);
-
-  // Generate mock tips data for demo
-  const generateMockTips = () => {
-    const donorNames = [
-      'Budi Santoso', 'Siti Rahmawati', 'Ahmad Wijaya', 'Dewi Kusuma',
-      'Rudi Hermawan', 'Sinta Nurhaliza', 'Eka Putrayuda', 'Rina Suhartini',
-      'Hendra Wijaya', 'Pratama Indra', 'Anonim'
-    ];
-    
-    const mockTips = [];
-    let baseTime = Date.now();
-    
-    for (let i = 0; i < 8; i++) {
-      const amount = (Math.floor(Math.random() * 5) + 1) * 50000; // Rp 50k - 250k
-      const hoursAgo = Math.floor(Math.random() * 24) + i * 3; // Spread across time
-      const donorIdx = Math.floor(Math.random() * donorNames.length);
-      
-      mockTips.push({
-        id: i + 1,
-        amount: amount,
-        donorName: donorNames[donorIdx],
-        paymentStatus: 'Berhasil',
-        createdAt: new Date(baseTime - hoursAgo * 60 * 60 * 1000).toISOString()
-      });
-    }
-    
-    return mockTips.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  };
 
   const loadTips = async () => {
     setLoadingTips(true);
@@ -116,15 +100,24 @@ function TipsPanel() {
       const resp = await fetch(apiUrl('/api/tips'));
       if (!resp.ok) throw new Error('Gagal memuat tips');
       const list = await resp.json();
-      // Show mock data if API returns empty
-      setTips(Array.isArray(list) && list.length > 0 ? list : generateMockTips());
+      const nextTips = Array.isArray(list) ? list : [];
+      setTips(nextTips);
+      try {
+        window.localStorage.setItem(tipsCacheKey, JSON.stringify(nextTips));
+      } catch {
+        // ignore cache write failures
+      }
       setLastRefresh(Date.now());
     } catch (err) {
       console.error('Load tips error', err);
-      // Show mock tips on error instead of error message
-      setTips(generateMockTips());
+      const cachedTips = loadTipsCache();
+      setTips(cachedTips);
       setLastRefresh(Date.now());
-      // Don't show error, silently fall back to mock data
+      setErrorTips(
+        cachedTips.length > 0
+          ? 'Backend belum aktif. Menampilkan data tips lokal terakhir.'
+          : 'Backend belum aktif. Jalankan server API untuk memuat tips terbaru.'
+      );
     } finally {
       setLoadingTips(false);
     }
@@ -138,14 +131,53 @@ function TipsPanel() {
         const body = await resp.json().catch(() => ({}));
         throw new Error(body.error || 'Gagal menghapus tip');
       }
-      setTips((current) => current.filter((tip) => tip.id !== tipId));
+      setTips((current) => {
+        const next = current.filter((tip) => tip.id !== tipId);
+        try {
+          window.localStorage.setItem(tipsCacheKey, JSON.stringify(next));
+        } catch {
+          // ignore cache write failures
+        }
+        return next;
+      });
     } catch (err) {
-      // For mock tips, just remove them from the list
-      setTips((current) => current.filter((tip) => tip.id !== tipId));
+      alert(err instanceof Error ? err.message : 'Gagal menghapus tip');
+    }
+  };
+
+  const clearAllTips = async () => {
+    if (tips.length === 0) return;
+    if (!window.confirm(`Hapus semua tips (${tips.length} data)?`)) return;
+
+    setClearingTips(true);
+    setErrorTips('');
+    try {
+      const resp = await fetch(apiUrl('/api/tips'), { method: 'DELETE' });
+      if (!resp.ok) {
+        const body = await resp.json().catch(() => ({}));
+        throw new Error(body.error || 'Gagal menghapus semua tips');
+      }
+      setTips([]);
+      try {
+        window.localStorage.setItem(tipsCacheKey, JSON.stringify([]));
+      } catch {
+        // ignore cache write failures
+      }
+      setLastRefresh(Date.now());
+    } catch (err) {
+      setErrorTips(err instanceof Error ? err.message : 'Gagal menghapus semua tips');
+    } finally {
+      setClearingTips(false);
     }
   };
 
   useEffect(() => {
+    const cachedTips = loadTipsCache();
+    if (cachedTips.length > 0) {
+      setTips(cachedTips);
+      setLastRefresh(Date.now());
+    }
+
     loadTips();
     const timer = window.setInterval(() => {
       loadTips();
@@ -157,19 +189,31 @@ function TipsPanel() {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
-        <button
-          type="button"
-          onClick={loadTips}
-          className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-100 hover:bg-slate-600"
-        >
-          Muat Ulang
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={loadTips}
+            className="rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-slate-100 hover:bg-slate-600"
+          >
+            Muat Ulang
+          </button>
+          <button
+            type="button"
+            onClick={clearAllTips}
+            disabled={tips.length === 0 || loadingTips || clearingTips}
+            className="rounded-lg border border-red-700 bg-red-900/60 px-3 py-2 text-sm text-red-100 hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {clearingTips ? 'Menghapus...' : 'Clear All'}
+          </button>
+        </div>
         <div className="text-xs text-slate-400">
           {lastRefresh ? `Terakhir diperbarui ${new Date(lastRefresh).toLocaleTimeString()}` : 'Belum diperbarui'}
         </div>
       </div>
       {loadingTips ? (
         <div className="text-slate-400">Memuat tips...</div>
+      ) : errorTips ? (
+        <div className="text-rose-300">{errorTips}</div>
       ) : tips.length === 0 ? (
         <div className="text-slate-400">Tidak ada data tips untuk ditampilkan.</div>
       ) : (
@@ -224,6 +268,13 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
     const normalizedTarget = Math.max(0, rawTarget > 0 ? rawTarget : rawGoal);
     const normalizedCollected = Math.max(0, toSafeNumber(campaign.collected, 0));
     const normalizedDonors = Math.max(0, toSafeNumber(campaign.donors, 0));
+    const baseStatus = (campaign.status ?? 'pending') as CampaignStatus;
+    const hasFundraisingProgress = normalizedCollected > 0 || normalizedDonors > 0;
+    const effectiveStatus: CampaignStatus = baseStatus === 'rejected'
+      ? 'rejected'
+      : hasFundraisingProgress
+        ? 'verified'
+        : baseStatus;
 
     return {
       ...campaign,
@@ -236,53 +287,9 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
       target: normalizedTarget,
       collected: normalizedCollected,
       donors: normalizedDonors,
-      status: campaign.status ?? 'pending',
+      status: effectiveStatus,
     };
   });
-
-  // Generate demo pending campaigns if none exist
-  const generateDemoPendingCampaigns = () => {
-    return [
-      {
-        id: 101,
-        createdAt: Date.now() - 3600000,
-        title: 'Toko Kelontong Bu Ria Butuh Modal',
-        description: 'Toko kelontong yang menjadi sumber penghidupan keluarga memerlukan modal tambahan untuk restok barang.',
-        location: 'Yogyakarta',
-        target: 5000000,
-        goal: 0,
-        collected: 0,
-        donors: 0,
-        daysLeft: 30,
-        category: 'UMKM Terdampak',
-        organizer: 'Bu Ria',
-        creatorEmail: 'buria@bantusesama.id',
-        status: 'pending' as const,
-        fundAllocation: [],
-        disbursementHistory: [],
-        donations: []
-      },
-      {
-        id: 102,
-        createdAt: Date.now() - 7200000,
-        title: 'Barbershop Pak Doni Perlu Renovasi',
-        description: 'Barbershop yang sudah beroperasi 5 tahun memerlukan renovasi dan membeli peralatan terbaru.',
-        location: 'Medan',
-        target: 8000000,
-        goal: 0,
-        collected: 0,
-        donors: 0,
-        daysLeft: 30,
-        category: 'UMKM Terdampak',
-        organizer: 'Pak Doni',
-        creatorEmail: 'pakdoni@bantusesama.id',
-        status: 'pending' as const,
-        fundAllocation: [],
-        disbursementHistory: [],
-        donations: []
-      }
-    ];
-  };
 
   const sortedCampaigns = [...normalizedCampaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
   const visibleCampaigns = sortedCampaigns.filter((campaign) => campaign.status !== 'rejected');
@@ -311,9 +318,18 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
   const totalDonors = normalizedCampaigns.reduce((sum, campaign) => sum + campaign.donors, 0);
   const avgProgress = totalTarget > 0 ? (totalRaised / totalTarget) * 100 : 0;
 
-  const pendingCampaigns = normalizedCampaigns.filter((campaign) => campaign.status === 'pending');
-  // Show demo pending campaigns if none exist
-  const displayPendingCampaigns = pendingCampaigns.length > 0 ? pendingCampaigns : generateDemoPendingCampaigns();
+  const pendingCampaigns = normalizedCampaigns.filter((campaign) => {
+    if (campaign.status !== 'pending') {
+      return false;
+    }
+
+    // Only treat truly new submissions as pending-verification items.
+    // Campaigns with existing fundraising progress are considered already live data.
+    const collected = Math.max(0, Number(campaign.collected || 0));
+    const donors = Math.max(0, Number(campaign.donors || 0));
+    return collected === 0 && donors === 0;
+  });
+  const displayPendingCampaigns = pendingCampaigns;
   const rejectedCampaigns = normalizedCampaigns.filter((campaign) => campaign.status === 'rejected');
   const verifiedCampaigns = normalizedCampaigns.filter((campaign) => campaign.status !== 'pending' && campaign.status !== 'rejected');
 
@@ -603,7 +619,7 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
               </CardDescription>
             </CardHeader>
             <CardContent className="px-6 pb-6">
-              <BannerManager />
+              <CardDescription className="text-slate-400">Lihat tips sukarela yang benar-benar masuk ke platform.</CardDescription>
             </CardContent>
           </Card>
         </section>
@@ -612,7 +628,7 @@ export function AdminDashboard({ campaigns, users, withdrawalRequests, user, onV
           <Card className="bg-slate-800 border-slate-700 shadow-sm">
             <CardHeader className="px-6 pt-6">
               <CardTitle className="text-slate-100">Daftar Tips Masuk</CardTitle>
-              <CardDescription className="text-slate-400">Lihat tips sukarela yang masuk ke platform (demo).</CardDescription>
+              <CardDescription className="text-slate-400">Lihat tips sukarela yang benar-benar masuk ke platform.</CardDescription>
             </CardHeader>
             <CardContent className="px-6 pb-6">
               <TipsPanel />

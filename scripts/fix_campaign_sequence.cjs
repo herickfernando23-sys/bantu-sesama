@@ -2,10 +2,9 @@
 const path = require('path');
 const fs = require('fs');
 
-// Load .env manually so this script doesn't require additional packages
-const envPath = path.resolve(__dirname, '../.env');
-if (fs.existsSync(envPath)) {
-  const content = fs.readFileSync(envPath, 'utf8');
+const loadEnvFile = (filePath, overwrite = true) => {
+  if (!fs.existsSync(filePath)) return;
+  const content = fs.readFileSync(filePath, 'utf8');
   content.split(/\r?\n/).forEach((line) => {
     const trimmed = line.trim();
     if (!trimmed || trimmed.startsWith('#')) return;
@@ -13,9 +12,15 @@ if (fs.existsSync(envPath)) {
     if (idx === -1) return;
     const key = trimmed.slice(0, idx);
     const val = trimmed.slice(idx + 1);
+    if (!overwrite && Object.prototype.hasOwnProperty.call(process.env, key)) return;
     process.env[key] = val;
   });
-}
+};
+
+// Mirror backend runtime loading order:
+// 1) server/.env, 2) root .env without overriding existing keys.
+loadEnvFile(path.resolve(__dirname, '../server/.env'), true);
+loadEnvFile(path.resolve(__dirname, '../.env'), false);
 
 const { sequelize } = require('../server/models');
 

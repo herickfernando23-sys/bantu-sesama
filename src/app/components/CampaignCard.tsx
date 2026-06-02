@@ -32,8 +32,8 @@ export function CampaignCard({
 }: CampaignCardProps) {
   const effectiveTarget = target > 0 ? target : (goal ?? 0);
   const filledTarget = effectiveTarget > 0 ? effectiveTarget : 5000000;
-  const filledCollected = collected > 0 ? collected : Math.max(500000, Math.round(filledTarget * 0.15));
-  const filledDonors = donors > 0 ? donors : 2;
+  const filledCollected = Math.max(0, collected || 0);
+  const filledDonors = Math.max(0, donors || 0);
   const percentage = filledTarget > 0 ? Math.min((filledCollected / filledTarget) * 100, 100) : 0;
 
   return (

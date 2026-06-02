@@ -1,26 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowLeft, ExternalLink, Loader, RefreshCw, ShieldAlert, CheckCircle2, Clock3, XCircle, Copy } from 'lucide-react';
-import { apiUrl, getApiBaseUrl } from '../lib/apiBaseUrl';
-
-<<<<<<< HEAD
-function resolveApiBaseUrl() {
-  const envBaseUrl = String((import.meta as any).env?.VITE_API_URL || '').trim();
-
-  if (envBaseUrl) {
-    return envBaseUrl.replace(/\/$/, '');
-  }
-
-  if (typeof window !== 'undefined' && window.location?.origin) {
-    return window.location.origin.replace(/\/$/, '');
-  }
-
-  return 'http://localhost:8080';
-}
-
-const apiBaseUrl = resolveApiBaseUrl();
-=======
-const apiBaseUrl = getApiBaseUrl();
->>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
+import { apiUrl } from '../lib/apiBaseUrl';
 const midtransClientKey = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_CLIENT_KEY) || '').trim();
 const viteMidtransIsProduction = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_IS_PRODUCTION) || '').toLowerCase() === 'true';
 const pendingPaymentsKey = 'bantusesama-pending-payments';

@@ -15,6 +15,7 @@ const donationRoutes = require('./routes/donations');
 const recurringRoutes = require('./routes/recurring');
 const tipsRoutes = require('./routes/tips');
 const sponsorBannersRoutes = require('./routes/sponsor_banners');
+const adminWithdrawalsRoutes = require('./routes/admin_withdrawals');
 const recurringService = require('./services/recurringPaymentService');
 
 const app = express();
@@ -84,7 +85,8 @@ if (!isProduction) {
 }
 
 app.use(cors(corsOptions));
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '15mb' }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '15mb' }));
 
 app.get('/', (req, res) => {
   res.json({
@@ -178,6 +180,7 @@ app.use('/api/donations', donationRoutes);
 app.use('/api/recurring', recurringRoutes);
 app.use('/api/tips', tipsRoutes);
 app.use('/api/sponsor-banners', sponsorBannersRoutes);
+app.use('/api/admin/withdrawals', adminWithdrawalsRoutes);
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));

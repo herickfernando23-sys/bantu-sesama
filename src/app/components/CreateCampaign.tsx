@@ -297,6 +297,7 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
         organizer: createdCampaign.organizer || organizerName,
         status: createdCampaign.status || 'pending',
         story: createdCampaign.fullDescription || formData.fullDescription || formData.description,
+        localOnly: false,
         fundAllocation: [
           { name: 'Alokasi Dana', value: targetAmount, color: '#10B981' }
         ],
@@ -319,6 +320,56 @@ export function CreateCampaign({ onCreate, user }: CreateCampaignProps) {
 
       toast.success('Kampanye berhasil dibuat dan menunggu verifikasi admin');
     } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      const isNetworkError = /failed to fetch|networkerror|network request failed/i.test(message);
+
+      if (isNetworkError) {
+        const targetAmount = parseInt(formData.target);
+        const campaignImage = imagePreview || DEFAULT_CAMPAIGN_IMAGE;
+        const organizerName = user?.name?.trim() || user?.email?.split('@')[0] || 'Penggalang';
+
+        const localCampaign = {
+          id: Date.now(),
+          createdAt: Date.now(),
+          title: formData.title,
+          description: formData.description,
+          fullDescription: formData.fullDescription || formData.description,
+          image: campaignImage,
+          location: formData.location,
+          creatorEmail: user?.email,
+          target: targetAmount,
+          collected: 0,
+          donors: 0,
+          daysLeft: 30,
+          category: formData.category,
+          organizer: organizerName,
+          status: 'pending',
+          localOnly: true,
+          story: formData.fullDescription || formData.description,
+          fundAllocation: [
+            { name: 'Alokasi Dana', value: targetAmount, color: '#10B981' }
+          ],
+          disbursementHistory: []
+        };
+
+        onCreate(localCampaign);
+
+        setFormData({
+          title: '',
+          description: '',
+          category: 'UMKM Terdampak Bencana',
+          target: '',
+          location: '',
+          fullDescription: ''
+        });
+        setSelectedImage(null);
+        setImagePreview('');
+
+        toast.warning('Backend belum aktif. Kampanye disimpan lokal dulu dan menunggu sinkronisasi server.');
+        console.error('Create campaign network fallback:', err);
+        return;
+      }
+
       const errorMessage = err instanceof Error ? err.message : 'Terjadi kesalahan saat membuat kampanye (upload gambar). Silakan coba lagi atau gunakan gambar dengan ukuran lebih kecil.';
       toast.error(errorMessage);
       console.error(err);

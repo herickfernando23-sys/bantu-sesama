@@ -39,8 +39,7 @@ router.get('/', async (req, res) => {
     res.json(tips);
   } catch (err) {
     console.error('Error fetching tips:', err);
-    // Return empty array if database connection fails temporarily
-    res.status(200).json([]);
+    res.status(500).json({ error: 'Failed to fetch tips' });
   }
 });
 
@@ -59,6 +58,16 @@ router.delete('/:id', async (req, res) => {
   } catch (err) {
     console.error('Delete tip error', err);
     res.status(500).json({ error: err.message || 'Gagal menghapus tip' });
+  }
+});
+
+router.delete('/', async (req, res) => {
+  try {
+    const deleted = await Tip.destroy({ where: {} });
+    res.json({ success: true, deleted });
+  } catch (err) {
+    console.error('Clear tips error', err);
+    res.status(500).json({ error: err.message || 'Gagal menghapus semua tips' });
   }
 });
 

@@ -3,7 +3,7 @@ import { MapPin, Users, Calendar, Share2, Heart, TrendingUp, Shield, FileText, F
 import { TransparencyChart } from './TransparencyChart';
 import { useEffect, useState, useRef } from 'react';
 import { PaymentModal } from './PaymentModal';
-import { apiUrl, getApiBaseUrl } from '../lib/apiBaseUrl';
+import { apiUrl } from '../lib/apiBaseUrl';
 
 interface Campaign {
   id: number;
@@ -32,7 +32,7 @@ interface CampaignDetailProps {
   withdrawalRequests?: Array<{id: number; campaignId: number; amount: number; status: string; updatedAt: number; note?: string}>;
   user?: { name: string; email?: string } | null;
   onBack: () => void;
-  onUpdateCampaign?: (campaignId: number, updates: Partial<Campaign>) => void;
+  onUpdateCampaign?: (campaignId: number, updates: Partial<Campaign>) => Promise<void> | void;
   onRequestWithdrawal?: (campaignId: number, request: { amount: number; note: string }) => void;
   onDonationSuccess?: (amount: number, donorInfo: {name: string; message: string; tip?: number}) => void;
   onNavigateToContinuePayment?: (payment: {
@@ -100,11 +100,16 @@ const toDisbursementEditorItems = (items: Campaign['disbursementHistory']): Disb
     : [{ date: '', amount: '', purpose: '' }]
 );
 
+const parseCurrencyValue = (value: string): number => {
+  const cleaned = String(value || '').replace(/[\.\s,]/g, '').trim();
+  return Number(cleaned);
+};
+
 const toCampaignAllocations = (items: AllocationEditorItem[]) => (
   items
     .map((item) => ({
       name: item.name.trim(),
-      value: Number(item.value),
+      value: parseCurrencyValue(item.value),
       color: item.color.trim() || '#10B981'
     }))
     .filter((item) => item.name && Number.isFinite(item.value) && item.value > 0)
@@ -114,10 +119,10 @@ const toCampaignDisbursements = (items: DisbursementEditorItem[]) => (
   items
     .map((item) => ({
       date: item.date.trim(),
-      amount: Number(item.amount),
+      amount: parseCurrencyValue(item.amount),
       purpose: item.purpose.trim()
     }))
-    .filter((item) => item.date && Number.isFinite(item.amount) && item.amount >= 0 && item.purpose)
+    .filter((item) => item.date && item.amount > 0 && Number.isFinite(item.amount) && item.purpose)
 );
 
 const formatNumberWithSeparators = (value: string) => {
@@ -169,57 +174,12 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   const [withdrawAmount, setWithdrawAmount] = useState(String(campaign.collected));
   const [withdrawNote, setWithdrawNote] = useState('');
   const [withdrawError, setWithdrawError] = useState('');
-  
-<<<<<<< HEAD
-=======
-  // Apply same fallback logic as CampaignCard for demo data (must be before generateMockDonations)
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
+
   const filledTarget = campaign.target > 0 ? campaign.target : (campaign.goal ?? 5000000);
-  const filledCollected = campaign.collected > 0 ? campaign.collected : Math.max(500000, Math.round(filledTarget * 0.15));
-  const filledDonors = campaign.donors > 0 ? campaign.donors : 2;
-  
-  // Generate mock data berbeda untuk setiap campaign berdasarkan campaign ID
-  const generateMockDonations = (campaignId: number) => {
-    const donors = [
-      'Siti Nurhaliza', 'Bambang Wijaya', 'Rina Sutrisno', 'Ahmad Suryanto', 'Dewi Lestari',
-      'Rudi Hartono', 'Sinta Paramita', 'Doni Pratama', 'Ratna Wijaya', 'Hendri Kusuma',
-      'Anita Soeharto', 'Budi Santoso', 'Citra Dewi', 'Eka Putra', 'Farah Nabila'
-    ];
-    const messages = [
-      'Semoga bisa membantu', 'Perjuangan membutuhkan dukungan', 'Semoga berkah dan lancar',
-      'Semangat terus!', 'Semoga lancar selalu', 'Bangkit dan berkembang', 'Untuk masa depan yang lebih baik',
-      'Doa dan dukungan bersama'
-    ];
-    
-    // Use campaign ID as seed untuk generate different data per campaign
-    let seed = campaignId;
-    const seededRandom = () => {
-      seed = (seed * 9301 + 49297) % 233280;
-      return seed / 233280;
-    };
-    
-    const mockCount = filledDonors; // Use filled donors count
-    const mockData = [];
-    
-    for (let i = 0; i < mockCount; i++) {
-      const donorIdx = Math.floor(seededRandom() * donors.length);
-      const messageIdx = Math.floor(seededRandom() * (messages.length + 1));
-      const amount = (Math.floor(seededRandom() * 15) + 1) * 100000; // Rp 100k - 1.5jt
-      const hoursAgo = Math.floor(seededRandom() * 72) + 1; // 1-72 jam lalu
-      
-      mockData.push({
-        name: donors[donorIdx],
-        amount: amount,
-        message: messageIdx < messages.length ? messages[messageIdx] : '',
-        timestamp: Date.now() - hoursAgo * 60 * 60 * 1000
-      });
-    }
-    
-    return mockData;
-  };
-  
-  const mockDonations = useMemo(() => generateMockDonations(campaign.id), [campaign.id, filledDonors]);
-  
->>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
+  const filledCollected = Math.max(0, campaign.collected || 0);
+  const filledDonors = Math.max(0, campaign.donors || 0);
+
   const [fetchedDonations, setFetchedDonations] = useState<Array<{name: string; amount: number; message: string; timestamp: number}> | null>(null);
   const [loadingDonations, setLoadingDonations] = useState(false);
 
@@ -238,17 +198,28 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
       : 'Penggalang dana telah diverifikasi oleh tim BantuSesama';
   
   const getTimeAgo = (timestamp: number): string => {
-    const now = Date.now();
-    const diff = now - timestamp;
-    const seconds = Math.floor(diff / 1000);
-    const minutes = Math.floor(seconds / 60);
-    const hours = Math.floor(minutes / 60);
-    const days = Math.floor(hours / 24);
-    
-    if (days > 0) return days === 1 ? '1 hari lalu' : `${days} hari lalu`;
-    if (hours > 0) return hours === 1 ? '1 jam lalu' : `${hours} jam lalu`;
-    if (minutes > 0) return minutes === 1 ? '1 menit lalu' : `${minutes} menit lalu`;
-    return 'baru saja';
+    const parsedDate = new Date(timestamp);
+    if (Number.isNaN(parsedDate.getTime())) {
+      return '-';
+    }
+
+    const now = new Date();
+    const diffMs = now.getTime() - parsedDate.getTime();
+    const diffSeconds = Math.round(diffMs / 1000);
+    const diffMinutes = Math.round(diffMs / 60_000);
+    const diffHours = Math.round(diffMs / 3_600_000);
+    const diffDays = Math.round(diffMs / 86_400_000);
+
+    if (diffSeconds < 60) {
+      return 'Beberapa detik yang lalu';
+    }
+    if (diffMinutes < 60) {
+      return `${diffMinutes} menit yang lalu`;
+    }
+    if (diffHours < 24) {
+      return `${diffHours} jam yang lalu`;
+    }
+    return `${diffDays} hari yang lalu`;
   };
   
   const donorEntries = (() => {
@@ -344,16 +315,6 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
       if (campaign.donors > 0) {
         setLoadingDonations(true);
         (async () => {
-<<<<<<< HEAD
-            const envBaseUrl = String((import.meta as any).env?.VITE_API_URL || '').trim();
-            const apiBaseUrl = envBaseUrl
-              ? envBaseUrl.replace(/\/$/, '')
-              : (typeof window !== 'undefined' && window.location?.origin
-                ? window.location.origin.replace(/\/$/, '')
-                : 'http://localhost:8080');
-=======
-            const apiBaseUrl = getApiBaseUrl();
->>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
           try {
             const res = await fetch(apiUrl(`/api/donations?campaignId=${campaign.id}`));
             if (!res.ok) {
@@ -443,7 +404,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
     setWithdrawAmount('');
   };
 
-  const handleSaveEdit = () => {
+  const handleSaveEdit = async () => {
     const nextTarget = Number(editTarget);
     const nextDaysLeft = Number(editDaysLeft);
     const nextAllocations = toCampaignAllocations(editAllocations);
@@ -474,23 +435,56 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
       return;
     }
 
+    const hasInvalidAllocations = editAllocations.some((item) => {
+      const hasAnyValue = item.name.trim() || item.value.trim() || item.color.trim();
+      const amount = parseCurrencyValue(item.value);
+      const isValid = item.name.trim() && Number.isFinite(amount) && amount > 0;
+      return hasAnyValue && !isValid;
+    });
+
+    if (hasInvalidAllocations) {
+      showEditError('Semua baris alokasi harus lengkap: nama alokasi dan nominal yang valid.');
+      return;
+    }
+
+    const hasInvalidDisbursements = editDisbursements.some((item) => {
+      const hasAnyValue = item.date.trim() || item.amount.trim() || item.purpose.trim();
+      const amount = parseCurrencyValue(item.amount);
+      const isValid = item.date.trim() && item.amount.trim() && Number.isFinite(amount) && amount > 0 && item.purpose.trim();
+      return hasAnyValue && !isValid;
+    });
+
+    if (hasInvalidDisbursements) {
+      showEditError('Semua baris pencairan harus lengkap: tanggal, nominal, dan keterangan.');
+      return;
+    }
+
     setEditError('');
 
-    onUpdateCampaign?.(campaign.id, {
-      title: editTitle.trim(),
-      description: campaign.description,
-      fullDescription: editStory.trim(),
-      location: editLocation.trim(),
-      category: editCategory.trim(),
-      organizer: editOrganizer.trim(),
-      image: editImage.trim() || campaign.image,
-      target: nextTarget,
-      daysLeft: nextDaysLeft,
-      story: editStory.trim(),
-      fundAllocation: nextAllocations.length > 0 ? nextAllocations : campaign.fundAllocation,
-      disbursementHistory: nextDisbursements.length > 0 ? nextDisbursements : campaign.disbursementHistory
-    });
-    setIsEditing(false);
+    try {
+      setIsSavingEdit(true);
+      await onUpdateCampaign?.(campaign.id, {
+        title: editTitle.trim(),
+        description: editStory.trim(),
+        fullDescription: editStory.trim(),
+        location: editLocation.trim(),
+        category: editCategory.trim(),
+        organizer: editOrganizer.trim(),
+        creatorEmail: campaign.creatorEmail,
+        image: editImage.trim() || campaign.image,
+        target: nextTarget,
+        goal: nextTarget,
+        daysLeft: nextDaysLeft,
+        story: editStory.trim(),
+        fundAllocation: nextAllocations.length > 0 ? nextAllocations : campaign.fundAllocation,
+        disbursementHistory: nextDisbursements.length > 0 ? nextDisbursements : campaign.disbursementHistory
+      });
+      setIsEditing(false);
+    } catch (err) {
+      showEditError(err instanceof Error ? err.message : 'Gagal menyimpan perubahan kampanye');
+    } finally {
+      setIsSavingEdit(false);
+    }
   };
 
   return (
@@ -748,7 +742,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                       </div>
                     </div>
                     <div className="flex flex-wrap gap-3">
-                      <button type="button" onClick={handleSaveEdit} className="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700">Simpan Perubahan</button>
+                      <button type="button" onClick={handleSaveEdit} disabled={isSavingEdit} className="px-4 py-2 rounded-lg bg-blue-600 text-white font-medium hover:bg-blue-700 disabled:cursor-not-allowed disabled:bg-blue-400">{isSavingEdit ? 'Menyimpan...' : 'Simpan Perubahan'}</button>
                       <button type="button" onClick={() => { syncEditState(); setIsEditing(false); }} className="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium hover:bg-gray-50">Reset</button>
                     </div>
                   </div>
