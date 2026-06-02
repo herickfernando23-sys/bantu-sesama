@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { X, CreditCard, Check, Calendar, Loader, Clock3, RefreshCw, ExternalLink } from 'lucide-react';
 
+<<<<<<< HEAD
 function resolveApiBaseUrl() {
   const envBaseUrl = String((import.meta as any).env?.VITE_API_URL || '').trim();
 
@@ -16,6 +17,11 @@ function resolveApiBaseUrl() {
 }
 
 const apiBaseUrl = resolveApiBaseUrl();
+=======
+import { apiUrl, getApiBaseUrl } from '../lib/apiBaseUrl';
+
+const apiBaseUrl = getApiBaseUrl();
+>>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
 const midtransClientKey = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_CLIENT_KEY) || '').trim();
 const viteMidtransIsProduction = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_IS_PRODUCTION) || '').toLowerCase() === 'true';
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -268,7 +274,6 @@ export function PaymentModal({
   const [isSnapReady, setIsSnapReady] = useState(!!window.snap);
   const [isDemoPaymentMode, setIsDemoPaymentMode] = useState(false);
   const paymentCompletionRef = useRef(false);
-  const closeFailureTimeoutRef = useRef<number | null>(null);
   const pendingErrorTimeoutRef = useRef<number | null>(null);
   const suppressErrorsRef = useRef(false);
 
@@ -296,10 +301,6 @@ export function PaymentModal({
 
   const resetForm = () => {
     paymentCompletionRef.current = false;
-    if (closeFailureTimeoutRef.current) {
-      window.clearTimeout(closeFailureTimeoutRef.current);
-      closeFailureTimeoutRef.current = null;
-    }
     if (pendingErrorTimeoutRef.current) {
       window.clearTimeout(pendingErrorTimeoutRef.current);
       pendingErrorTimeoutRef.current = null;
@@ -427,10 +428,6 @@ export function PaymentModal({
 
   const completeSuccessfulPayment = (paymentAmount: number, message: string) => {
     paymentCompletionRef.current = true;
-    if (closeFailureTimeoutRef.current) {
-      window.clearTimeout(closeFailureTimeoutRef.current);
-      closeFailureTimeoutRef.current = null;
-    }
     if (pendingErrorTimeoutRef.current) {
       window.clearTimeout(pendingErrorTimeoutRef.current);
       pendingErrorTimeoutRef.current = null;
@@ -476,7 +473,7 @@ export function PaymentModal({
     setError('');
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/payments/confirm`, {
+      const response = await fetch(apiUrl('/api/payments/confirm'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -529,7 +526,7 @@ export function PaymentModal({
     setError('');
 
     try {
-      const response = await fetch(`${apiBaseUrl}/api/payments/cancel`, {
+      const response = await fetch(apiUrl('/api/payments/cancel'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -569,7 +566,7 @@ export function PaymentModal({
       let tokenToUse = '';
 
       try {
-        const createResp = await fetch(`${apiBaseUrl}/api/payments/create-intent`, {
+        const createResp = await fetch(apiUrl('/api/payments/create-intent'), {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -637,14 +634,10 @@ export function PaymentModal({
             onSuccess: async (result: Record<string, unknown>) => {
               snapCallbackFired = true;
               paymentCompletionRef.current = true;
-              if (closeFailureTimeoutRef.current) {
-                window.clearTimeout(closeFailureTimeoutRef.current);
-                closeFailureTimeoutRef.current = null;
-              }
               clearTimeout(snapTimeoutHandle);
               console.info('Midtrans onSuccess', { result, donationId: donationIdForCallback, orderId: orderIdForCallback });
               try {
-                const response = await fetch(`${apiBaseUrl}/api/payments/confirm`, {
+                const response = await fetch(apiUrl('/api/payments/confirm'), {
                   method: 'POST',
                   headers: {
                     'Content-Type': 'application/json',
@@ -673,10 +666,6 @@ export function PaymentModal({
             onPending: (result: Record<string, unknown>) => {
               snapCallbackFired = true;
               paymentCompletionRef.current = true;
-              if (closeFailureTimeoutRef.current) {
-                window.clearTimeout(closeFailureTimeoutRef.current);
-                closeFailureTimeoutRef.current = null;
-              }
               clearTimeout(snapTimeoutHandle);
               console.info('Midtrans onPending', { result, donationId: donationIdForCallback, orderId: orderIdForCallback });
 
@@ -706,10 +695,6 @@ export function PaymentModal({
             },
             onError: (result?: Record<string, unknown>) => {
               snapCallbackFired = true;
-              if (closeFailureTimeoutRef.current) {
-                window.clearTimeout(closeFailureTimeoutRef.current);
-                closeFailureTimeoutRef.current = null;
-              }
               clearTimeout(snapTimeoutHandle);
               console.error('Midtrans onError', { result, donationId: donationIdForCallback, orderId: orderIdForCallback });
               safeSetError('Pembayaran Midtrans gagal. Silakan coba lagi.');
@@ -719,16 +704,7 @@ export function PaymentModal({
               clearTimeout(snapTimeoutHandle);
               console.info('Midtrans onClose', { donationId: donationIdForCallback, orderId: orderIdForCallback, transactionId: transactionIdForCallback, step: stepRef.current });
               if (stepRef.current === 'payment' && !paymentCompletionRef.current) {
-                if (closeFailureTimeoutRef.current) {
-                  window.clearTimeout(closeFailureTimeoutRef.current);
-                }
-
-                closeFailureTimeoutRef.current = window.setTimeout(() => {
-                  closeFailureTimeoutRef.current = null;
-                  if (stepRef.current === 'payment' && !paymentCompletionRef.current) {
-                    safeSetError('Pembayaran dibatalkan. Silakan coba lagi jika ingin melanjutkan donasi.');
-                  }
-                }, 5000);
+                console.info('Midtrans closed before callback completion; keeping current state until callback resolves');
               } else {
                 console.info('Midtrans closed after success/pending — ignoring');
               }
@@ -752,7 +728,7 @@ export function PaymentModal({
       const orderIdToUse = createdData?.orderId ? (createdData.orderId || '') : orderId;
       const transactionIdToUse = createdData?.transactionId ? (createdData.transactionId || '') : transactionId;
 
-      const response = await fetch(`${apiBaseUrl}/api/payments/confirm`, {
+      const response = await fetch(apiUrl('/api/payments/confirm'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

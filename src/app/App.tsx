@@ -10,7 +10,10 @@ import { AdminLogin } from './components/AdminLogin';
 import { AdminDashboard } from './components/AdminDashboard';
 import { ContinuePaymentPage } from './components/ContinuePaymentPage';
 import { Chatbot } from './components/Chatbot';
+import { apiUrl, getApiBaseUrl } from './lib/apiBaseUrl';
 import { TrendingUp, Shield, Users, Heart } from 'lucide-react';
+
+const DEFAULT_CAMPAIGN_IMAGE = 'data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 640 360%22%3E%3Crect width=%22640%22 height=%22360%22 fill=%22%23e5e7eb%22/%3E%3Ctext x=%22320%22 y=%22180%22 dominant-baseline=%22middle%22 text-anchor=%22middle%22 fill=%229ca3af%22 font-family=%22Arial%22 font-size=%2232%22%3ENo%20Image%3C/text%3E%3C/svg%3E';
 
 type Page =
   | 'kampanye'
@@ -46,6 +49,7 @@ type CampaignRecord = {
   image: string;
   location: string;
   target: number;
+  goal?: number;
   collected: number;
   donors: number;
   daysLeft: number;
@@ -91,6 +95,12 @@ type StoredUser = {
   password: string;
 };
 
+type ServerUserRow = {
+  id: number;
+  name: string;
+  email: string;
+};
+
 type PendingPaymentRecord = {
   donationId: number;
   orderId: string;
@@ -113,12 +123,22 @@ type RecurringDonationRecord = {
 };
 
 const campaignStorageKey = 'bantusesama-campaigns';
+const campaignCleanupVersionKey = 'bantusesama-campaign-cleanup-version';
+const campaignCleanupVersion = '2026-06-01-v3';
+const hiddenDemoCampaignIdsKey = 'bantusesama-hidden-demo-campaign-ids';
 const registeredUsersKey = 'bantusesama-registered-users';
 const adminSessionKey = 'bantusesama-admin-session';
 const withdrawalRequestsKey = 'bantusesama-withdrawal-requests';
 const pendingPaymentsKey = 'bantusesama-pending-payments';
 const userSessionKey = 'bantusesama-user-session';
 const recurringDonationsKey = 'bantusesama-recurring-donors';
+const toSafeText = (value: unknown) => String(value ?? '').trim();
+const toSafeNumber = (value: unknown, fallback = 0) => {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+};
+const stripMarkdownHeading = (value: unknown) => toSafeText(value).replace(/^\s*#{1,6}\s*/gm, '').replace(/\s+/g, ' ').trim();
+const normalizeKeyText = (value: unknown) => stripMarkdownHeading(value).toLowerCase();
 const legacyCampaignIdMap: Record<number, number> = {
   1001: 7,
   1002: 8,
@@ -136,6 +156,23 @@ const campaignImageOverrides: Record<number, string> = {
   11: 'https://images.unsplash.com/photo-1533900298318-6b8da08a523e?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D',
   12: 'https://images.unsplash.com/photo-1597129778410-0e4932adbd77?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHx8fGVufDB8fHx8fA%3D%3D'
 };
+
+const legacyPaginationMockTitles = new Set([
+  'Baksop Ibu Lina Butuh Modal Baru',
+  'Warung Nasi Pak Eko Perlu Perbaikan',
+  'Tukang Jahit Bu Titin Kembali Beroperasi',
+  'Pedagang Kaki Lima Butuh Gerobak Baru',
+  'Ibu Rani Butuh Modal untuk Toko Kelontong',
+  'Koperasi UKM Butuh Dana Operasional',
+  'Warung Bu Siti - Renovasi Dapur',
+  'Modal Usaha Korban Kebakaran Pasar',
+  'Gerobak Baru untuk Pak Joko',
+  'Bantuan Modal Toko Kelontong Ibu Rani',
+  'Dukungan Untuk Tukang Jahit Kecil',
+  'CCZXCC',
+  'Bantuan Modal Usaha Mikro',
+  'Dukungan UMKM Lokal'
+]);
 
 const loadRegisteredUsersFromStorage = () => {
   if (typeof window === 'undefined') {
@@ -231,6 +268,32 @@ const loadRecurringDonationsFromStorage = () => {
   }
 };
 
+const loadHiddenDemoCampaignIdsFromStorage = () => {
+  if (typeof window === 'undefined') {
+    return [] as number[];
+  }
+
+  try {
+    const raw = window.localStorage.getItem(hiddenDemoCampaignIdsKey);
+    const parsed = raw ? (JSON.parse(raw) as number[]) : [];
+    return Array.isArray(parsed) ? parsed.filter((id) => Number.isFinite(id) && id > 0) : [];
+  } catch {
+    return [] as number[];
+  }
+};
+
+const saveHiddenDemoCampaignIdsToStorage = (ids: number[]) => {
+  if (typeof window === 'undefined') {
+    return;
+  }
+
+  try {
+    window.localStorage.setItem(hiddenDemoCampaignIdsKey, JSON.stringify(ids));
+  } catch {
+    // ignore write failures
+  }
+};
+
 const getRecurringDonationForEmail = (email?: string | null) => {
   if (!email) {
     return null;
@@ -239,6 +302,7 @@ const getRecurringDonationForEmail = (email?: string | null) => {
   return loadRecurringDonationsFromStorage().find((record) => record.email.toLowerCase() === email.toLowerCase()) ?? null;
 };
 
+<<<<<<< HEAD
 const safeStringValue = (value?: string | null) => String(value ?? '').trim().toLowerCase();
 
 const buildCampaignFingerprint = (campaign: CampaignRecord) => {
@@ -259,31 +323,79 @@ const buildCampaignFingerprint = (campaign: CampaignRecord) => {
 
   return fingerprint;
 };
+=======
+const buildCampaignFingerprint = (campaign: CampaignRecord) => [
+  normalizeKeyText(campaign.title),
+  normalizeKeyText(campaign.location),
+  normalizeKeyText(campaign.creatorEmail),
+  normalizeKeyText(campaign.organizer),
+  normalizeKeyText(campaign.category),
+].join('|');
+>>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
 
 const migrateLegacyCampaignId = (campaign: CampaignRecord): CampaignRecord => {
   const nextId = legacyCampaignIdMap[campaign.id];
   return nextId ? { ...campaign, id: nextId } : campaign;
 };
 
-const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
-  const seenIds = new Set<number>();
-  const seenFingerprints = new Set<string>();
-
-  return campaigns.filter((campaign) => {
-    const fingerprint = buildCampaignFingerprint(campaign);
-    if (seenIds.has(campaign.id) || seenFingerprints.has(fingerprint)) {
-      return false;
-    }
-
-    seenIds.add(campaign.id);
-    seenFingerprints.add(fingerprint);
-    return true;
-  });
+const campaignStatusRank: Record<CampaignStatus, number> = {
+  verified: 3,
+  rejected: 2,
+  pending: 1
 };
 
-const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => ({
-  ...migrateLegacyCampaignId(campaign),
+const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
+  const byFingerprint = new Map<string, CampaignRecord>();
+
+  campaigns.forEach((campaign) => {
+    const fingerprint = buildCampaignFingerprint(campaign);
+    const existing = byFingerprint.get(fingerprint);
+    if (!existing) {
+      byFingerprint.set(fingerprint, campaign);
+      return;
+    }
+
+    const existingTarget = toSafeNumber(existing.target, 0);
+    const nextTarget = toSafeNumber(campaign.target, 0);
+    const existingCollected = toSafeNumber(existing.collected, 0);
+    const nextCollected = toSafeNumber(campaign.collected, 0);
+    const existingStatusScore = campaignStatusRank[(existing.status ?? 'pending') as CampaignStatus] ?? 0;
+    const nextStatusScore = campaignStatusRank[(campaign.status ?? 'pending') as CampaignStatus] ?? 0;
+    const existingScore = (existingStatusScore * 1_000_000_000) + existingTarget + existingCollected + (existing.createdAt ?? 0);
+    const nextScore = (nextStatusScore * 1_000_000_000) + nextTarget + nextCollected + (campaign.createdAt ?? 0);
+
+    if (nextScore > existingScore) {
+      byFingerprint.set(fingerprint, campaign);
+    }
+  });
+
+  return Array.from(byFingerprint.values());
+};
+
+const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
+  const rawTarget = toSafeNumber((campaign as CampaignRecord & { target?: number | string }).target, 0);
+  const rawGoal = toSafeNumber((campaign as CampaignRecord & { goal?: number | string }).goal, 0);
+  
+  let normalizedTarget = Math.max(0, rawTarget > 0 ? rawTarget : rawGoal);
+  if (normalizedTarget === 0) {
+    normalizedTarget = 5000000; // Default 5M for any campaign with missing target/goal
+  }
+  
+  const normalizedCollected = Math.max(0, toSafeNumber(campaign.collected, 0));
+  const normalizedDonors = Math.max(0, toSafeNumber(campaign.donors, 0));
+  const isSeedDemoCampaign = Number.isFinite(campaign.id) && campaign.id > 0 && campaign.id <= 6;
+  const correctedCollected = normalizedDonors === 0 && normalizedCollected > 0 && !isSeedDemoCampaign
+    ? 0
+    : normalizedCollected;
+
+  const migratedCampaign = migrateLegacyCampaignId(campaign);
+  const normalizedId = Number(migratedCampaign.id);
+
+  return ({
+  ...migratedCampaign,
+  id: Number.isFinite(normalizedId) && normalizedId > 0 ? normalizedId : 0,
   createdAt: campaign.createdAt ?? Date.now(),
+<<<<<<< HEAD
   title: campaign.title || '',
   description: campaign.description || '',
   location: campaign.location || '',
@@ -292,10 +404,46 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => ({
   fullDescription: campaign.fullDescription || campaign.story || campaign.description || '',
   story: campaign.story || campaign.fullDescription || campaign.description || '',
   image: campaign.image || '',
+=======
+  title: stripMarkdownHeading(campaign.title),
+  description: stripMarkdownHeading(campaign.description),
+  fullDescription: toSafeText(campaign.fullDescription || campaign.story || campaign.description),
+  story: toSafeText(campaign.story || campaign.fullDescription || campaign.description),
+  image: campaign.image || DEFAULT_CAMPAIGN_IMAGE,
+  location: toSafeText(campaign.location),
+  category: toSafeText(campaign.category),
+  organizer: toSafeText(campaign.organizer),
+  creatorEmail: toSafeText(campaign.creatorEmail),
+  goal: rawGoal,
+  target: normalizedTarget,
+  collected: correctedCollected,
+  donors: normalizedDonors,
+  daysLeft: Math.max(0, toSafeNumber(campaign.daysLeft, 0)),
+  status: Number.isFinite(campaign.id) && campaign.id > 0 && campaign.id <= 6
+    ? (campaign.status === 'rejected' ? 'rejected' : 'verified')
+    : (campaign.status ?? 'pending'),
+>>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
   fundAllocation: Array.isArray(campaign.fundAllocation) ? campaign.fundAllocation : [],
   disbursementHistory: Array.isArray(campaign.disbursementHistory) ? campaign.disbursementHistory : [],
   donations: Array.isArray(campaign.donations) ? campaign.donations : []
 });
+};
+
+const isRenderableCampaign = (campaign: CampaignRecord) => {
+  const title = toSafeText(campaign.title);
+  const description = toSafeText(campaign.description || campaign.fullDescription || campaign.story);
+  const location = toSafeText(campaign.location);
+  const organizer = toSafeText(campaign.organizer);
+  const target = Math.max(0, toSafeNumber(campaign.target, 0));
+
+  return (
+    title.length >= 4
+    && description.length >= 10
+    && location.length >= 2
+    && organizer.length >= 2
+    && target >= 100000
+  );
+};
 
 const infoPageContent: Record<InfoPageKey, { eyebrow: string; title: string; description: string; points: string[] }> = {
   'tentang-kami': {
@@ -412,6 +560,7 @@ export default function App() {
     ? (persistedAdminUser ? 'admin' : 'admin-login')
     : null;
   const [selectedCampaign, setSelectedCampaign] = useState<number | null>(null);
+  const [selectedCampaignSource, setSelectedCampaignSource] = useState<'id' | 'snapshot'>('id');
   const selectedCampaignSnapshotRef = useRef<CampaignRecord | null>(null);
   const [selectedCategory, setSelectedCategory] = useState('Semua Kategori');
   const [sortBy, setSortBy] = useState('Terbaru');
@@ -422,10 +571,13 @@ export default function App() {
   const [user, setUser] = useState<AppUser | null>(persistedUser);
   const [adminUser, setAdminUser] = useState<AppUser | null>(persistedAdminUser);
   const [registeredUsers, setRegisteredUsers] = useState<StoredUser[]>(() => loadRegisteredUsersFromStorage());
+  const [serverUsers, setServerUsers] = useState<ServerUserRow[]>([]);
   const [deletedUserEmails, setDeletedUserEmails] = useState<string[]>([]);
+  const [hiddenDemoCampaignIds, setHiddenDemoCampaignIds] = useState<number[]>(() => loadHiddenDemoCampaignIdsFromStorage());
+  const [hiddenRejectedCampaignIds, setHiddenRejectedCampaignIds] = useState<number[]>(() => loadHiddenRejectedCampaignIdsFromStorage());
   const [withdrawalRequests, setWithdrawalRequests] = useState<WithdrawalRequest[]>(() => loadWithdrawalRequestsFromStorage());
   const [pendingPayments, setPendingPayments] = useState<PendingPaymentRecord[]>(() => loadPendingPaymentsFromStorage());
-  const [rejectUndoState, setRejectUndoState] = useState<{ campaignId: number; previousStatus?: CampaignStatus; expiresAt: number } | null>(null);
+  const [rejectUndoState, setRejectUndoState] = useState<{ campaignId: number; previousCampaign?: CampaignRecord; expiresAt: number } | null>(null);
   const [deletedUserUndoState, setDeletedUserUndoState] = useState<{ email: string; userData: StoredUser | null; removedCampaigns: CampaignRecord[]; expiresAt: number } | null>(null);
   const [undoNow, setUndoNow] = useState(Date.now());
   const [recurringToggle, setRecurringToggle] = useState(0);
@@ -436,8 +588,11 @@ export default function App() {
   const deletedUserUndoTimeoutRef = useRef<number | null>(null);
   const campaignPageTransitionTimerRef = useRef<number | null>(null);
   const campaignListTopRef = useRef<HTMLDivElement | null>(null);
+  const syncCampaignsInFlightRef = useRef(false);
 
   const campaignStorageKey = 'bantusesama-campaigns';
+  const campaignUpdatedEventKey = 'bantusesama-campaigns-updated';
+  const hiddenRejectedCampaignIdsKey = 'bantusesama-hidden-rejected-campaign-ids';
 
   const loadCampaignsFromStorage = () => {
     if (typeof window === 'undefined') {
@@ -455,6 +610,134 @@ export default function App() {
     } catch {
       return null;
     }
+  };
+
+  function loadHiddenRejectedCampaignIdsFromStorage() {
+    if (typeof window === 'undefined') {
+      return [] as number[];
+    }
+
+    try {
+      const raw = window.localStorage.getItem(hiddenRejectedCampaignIdsKey);
+      const parsed = raw ? (JSON.parse(raw) as number[]) : [];
+      return Array.isArray(parsed) ? parsed.filter((id) => Number.isFinite(id) && id > 0) : [];
+    } catch {
+      return [] as number[];
+    }
+  }
+
+  const saveHiddenRejectedCampaignIdsToStorage = (ids: number[]) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(hiddenRejectedCampaignIdsKey, JSON.stringify(ids));
+    } catch {
+      // ignore write failures
+    }
+  };
+
+  const syncCampaignsFromServer = async (
+    cancelledRef?: { current: boolean },
+    extraHiddenDemoCampaignIds: number[] = []
+  ): Promise<boolean> => {
+    if (syncCampaignsInFlightRef.current) {
+      return false;
+    }
+
+    syncCampaignsInFlightRef.current = true;
+    try {
+      const response = await fetch(apiUrl(`/api/campaigns?_=${Date.now()}`), { cache: 'no-store' });
+      if ((cancelledRef?.current ?? false) || !response.ok) {
+        return false;
+      }
+
+      const list = await response.json();
+      if (!Array.isArray(list)) {
+        return false;
+      }
+
+      const hiddenDemoIds = new Set([...hiddenDemoCampaignIds, ...extraHiddenDemoCampaignIds]);
+
+      let remoteCampaigns = normalizeCampaignsForDisplay(list.map(normalizeCampaignRecord), getApiBaseUrl());
+      remoteCampaigns = remoteCampaigns.filter((campaign) => (
+        !hiddenDemoIds.has(campaign.id)
+        && campaign.status !== 'rejected'
+      ));
+
+      if (cancelledRef?.current) {
+        return false;
+      }
+
+      // Server-side campaign list should be authoritative for public listings.
+      setCampaigns(remoteCampaigns);
+      try {
+        window.localStorage.setItem(campaignStorageKey, JSON.stringify(remoteCampaigns));
+      } catch {
+        // ignore write failures
+      }
+      try {
+        window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
+      } catch {
+        // ignore write failures
+      }
+      return true;
+    } catch (err) {
+      return false;
+    } finally {
+      syncCampaignsInFlightRef.current = false;
+    }
+  };
+
+  const normalizeCampaignsForDisplay = (items: CampaignRecord[], apiBase: string) => {
+    const originalImagesFor1to6: Record<number, string> = {
+      1: 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwzfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      2: 'https://images.unsplash.com/photo-1774370793502-85098cd3fd00?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwyfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      3: 'https://images.unsplash.com/photo-1762592957827-99db60cfd0c7?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHx0cmFkaXRpb25hbCUyMG1hcmtldCUyMGZvb2QlMjB2ZW5kb3J8ZW58MXx8fHwxNzc3NTMyOTM3fDA&ixlib=rb-4.1.0&q=80&w=1080',
+      4: 'https://images.unsplash.com/photo-1768637758036-9a690925ae72?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw0fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      5: 'https://images.unsplash.com/photo-1757763006278-d0fa5d582d0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
+      6: 'https://images.unsplash.com/photo-1767678233351-9308d8220fa5?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHw1fHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080'
+    };
+
+    const normalizedItems = items.map(normalizeCampaignRecord);
+
+    return dedupeCampaigns(normalizedItems)
+      .filter((campaign) => campaign.status !== 'rejected')
+      .map((campaign) => {
+      if (campaign && typeof campaign.id === 'number' && originalImagesFor1to6[campaign.id]) {
+        return { ...campaign, image: originalImagesFor1to6[campaign.id] };
+      }
+
+      if (campaign && typeof campaign.id === 'number' && campaignImageOverrides[campaign.id]) {
+        return { ...campaign, image: campaignImageOverrides[campaign.id] };
+      }
+
+      try {
+        if (typeof campaign.image === 'string') {
+          // Preserve absolute external URLs as-is (do not rewrite to image-proxy).
+          // If image path is root-relative, prefix with apiBase so it resolves correctly.
+          if (campaign.image.startsWith('/')) {
+            if (apiBase) {
+              return { ...campaign, image: `${apiBase}${campaign.image}` };
+            }
+          }
+
+          // If it's already an absolute http(s) URL, keep it unchanged so the
+          // frontend can load the original image directly. This restores the
+          // previous behaviour where external images were used instead of
+          // forcing the backend image-proxy.
+          if (campaign.image.startsWith('http')) {
+            return campaign;
+          }
+        }
+      } catch (err) {
+        // ignore malformed urls
+      }
+
+        return campaign;
+      })
+      .filter(isRenderableCampaign);
   };
 
   const getCampaignIdFromUrl = () => {
@@ -505,6 +788,7 @@ export default function App() {
     }
 
     setSelectedCampaign(null);
+    setSelectedCampaignSource('id');
     // Push history first, then change page to ensure URL is available when component mounts
     window.history.pushState({ view: 'payment-continue' }, '', `/?${params.toString()}`);
     setPage('lanjut-pembayaran');
@@ -518,12 +802,14 @@ export default function App() {
 
       if (state?.view === 'campaign' && typeof state.campaignId === 'number') {
         setSelectedCampaign(state.campaignId);
+        setSelectedCampaignSource('id');
         setPage(null);
         return;
       }
 
       if (campaignIdFromUrl) {
         setSelectedCampaign(campaignIdFromUrl);
+        setSelectedCampaignSource('id');
         setPage(null);
         window.history.replaceState({ view: 'campaign', campaignId: campaignIdFromUrl }, '', `/?campaign=${campaignIdFromUrl}`);
         return;
@@ -531,12 +817,14 @@ export default function App() {
 
       if (paymentContinueFromUrl) {
         setSelectedCampaign(null);
+        setSelectedCampaignSource('id');
         setPage('lanjut-pembayaran');
         window.history.replaceState({ view: 'lanjut-pembayaran' }, '', `/?${window.location.search.replace(/^\?/, '')}`);
         return;
       }
 
       setSelectedCampaign(null);
+      setSelectedCampaignSource('id');
       setPage((state?.view as Page) ?? null);
     };
 
@@ -551,6 +839,7 @@ export default function App() {
 
     if (campaignIdFromUrl) {
       setSelectedCampaign(campaignIdFromUrl);
+      setSelectedCampaignSource('id');
       window.history.replaceState({ view: 'campaign', campaignId: campaignIdFromUrl }, '', `/?campaign=${campaignIdFromUrl}`);
     } else if (paymentContinueFromUrl) {
       window.history.replaceState({ view: 'lanjut-pembayaran' }, '', `/?${window.location.search.replace(/^\?/, '')}`);
@@ -564,6 +853,7 @@ export default function App() {
 
   const openCampaign = (campaignId: number) => {
     setSelectedCampaign(campaignId);
+    setSelectedCampaignSource('id');
     setPage(null);
     window.history.pushState(
       { view: 'campaign', campaignId },
@@ -579,10 +869,12 @@ export default function App() {
     }
 
     setSelectedCampaign(null);
+    setSelectedCampaignSource('id');
   };
 
   const goHome = () => {
     setSelectedCampaign(null);
+    setSelectedCampaignSource('id');
     setPage(null);
     window.history.pushState(
       { view: 'home' },
@@ -591,10 +883,12 @@ export default function App() {
     );
   };
 
+
   const navigatePage = (nextPage: string) => {
     const resolvedPage = nextPage as Page;
 
     setSelectedCampaign(null);
+    setSelectedCampaignSource('id');
 
     setPage(resolvedPage);
     const nextPath = resolvedPage === 'admin' || resolvedPage === 'admin-login' ? '/admin' : '/';
@@ -865,142 +1159,56 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
   ]);
 
-  // Append additional mock campaigns for testing pagination (only if not already present)
   useEffect(() => {
-    if (!campaignsHydrated) return; // wait until stored campaigns are loaded
-    const apiBase = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
-    const extraMockCampaigns: CampaignRecord[] = [
-      {
-        id: 7,
-        // make these mock campaigns older so they do not appear on page 1 (keep real campaigns first)
-        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 3,
-        title: 'Baksop Ibu Lina Butuh Modal Baru',
-        description: 'Baksop kecil membutuhkan modal untuk membeli peralatan baru setelah kebakaran.',
-        fullDescription: 'Baksop Ibu Lina adalah usaha rumahan membutuhkan modal untuk pengganti peralatan.',
-        story: 'Baksop Ibu Lina adalah usaha rumahan. Bantuan digunakan untuk mengganti peralatan yang hilang.',
-        status: 'verified',
-        image: 'https://images.unsplash.com/photo-1545731782-7ce02675a3e1?q=80&w=870&auto=format&fit=crop&ixlib=rb-4.1.0&ixid=M3wxMjA3fDB8MHxwaG90by1wYWdlfHxwYWdlfHx8fGVufDB8fHx8fA%3D%3D',
-        location: 'Bandung',
-        target: 8000000,
-        collected: 1200000,
-        donors: 12,
-        daysLeft: 20,
-        category: 'UMKM Terdampak Bencana',
-        organizer: 'Komunitas Lokal',
-        donations: [],
-        fundAllocation: [],
-        disbursementHistory: []
-      },
-      {
-        id: 8,
-        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 2,
-        title: 'Warung Nasi Pak Eko Perlu Perbaikan',
-        description: 'Atap warung rusak, butuh perbaikan untuk kembali berjualan.',
-        fullDescription: 'Warung Nasi Pak Eko membutuhkan perbaikan atap dan peralatan.',
-        story: 'Warung Nasi Pak Eko membutuhkan perbaikan atap dan peralatan agar dapat kembali berjualan.',
-        status: 'verified',
-        image: campaignImageOverrides[8],
-        location: 'Yogyakarta',
-        target: 6000000,
-        collected: 2500000,
-        donors: 34,
-        daysLeft: 12,
-        category: 'UMKM Terdampak Bencana',
-        organizer: 'Relawan Lokal',
-        donations: [],
-        fundAllocation: [],
-        disbursementHistory: []
-      },
-      {
-        id: 9,
-        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 2,
-        title: 'Tukang Jahit Bu Titin Kembali Beroperasi',
-        description: 'Mesin jahit lama butuh penggantian agar pesanan dapat kembali berjalan.',
-        fullDescription: 'Mesin jahit Bu Titin mengalami kerusakan serius, perlu diganti.',
-        story: 'Mesin jahit Bu Titin rusak dan butuh penggantian agar usaha bisa berjalan lagi.',
-        status: 'verified',
-        image: campaignImageOverrides[9],
-        location: 'Surabaya',
-        target: 4000000,
-        collected: 1800000,
-        donors: 8,
-        daysLeft: 30,
-        category: 'UMKM Terdampak Bencana',
-        organizer: 'Komunitas Penjahit',
-        donations: [],
-        fundAllocation: [],
-        disbursementHistory: []
-      },
-      {
-        id: 10,
-        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 1,
-        title: 'Pedagang Kaki Lima Butuh Gerobak Baru',
-        description: 'Komunitas PKL ingin membeli gerobak bersama agar bisa berdagang lagi.',
-        fullDescription: 'Dukungan untuk membeli gerobak dan peralatan agar usaha kembali berjalan.',
-        story: 'Komunitas PKL membutuhkan gerobak baru agar bisa berjualan kembali.',
-        status: 'verified',
-        image: campaignImageOverrides[10],
-        location: 'Medan',
-        target: 7000000,
-        collected: 3500000,
-        donors: 27,
-        daysLeft: 18,
-        category: 'UMKM Terdampak Bencana',
-        organizer: 'Paguyuban PKL',
-        donations: [],
-        fundAllocation: [],
-        disbursementHistory: []
-      },
-      {
-        id: 11,
-        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 1,
-        title: 'Ibu Rani Butuh Modal untuk Toko Kelontong',
-        description: 'Toko kelontong perlu tambahan modal untuk restock barang.',
-        fullDescription: 'Modal tambahan untuk membeli stok barang dan pembayaran sewa.',
-        story: 'Toko kelontong memerlukan modal untuk restock dan menutup biaya sewa.',
-        status: 'verified',
-        image: campaignImageOverrides[11],
-        location: 'Semarang',
-        target: 5000000,
-        collected: 900000,
-        donors: 5,
-        daysLeft: 40,
-        category: 'UMKM Terdampak Bencana',
-        organizer: 'RT setempat',
-        donations: [],
-        fundAllocation: [],
-        disbursementHistory: []
-      },
-      {
-        id: 12,
-        createdAt: Date.now() - 1000 * 60 * 60 * 24 * 365 * 4,
-        title: 'Koperasi UKM Butuh Dana Operasional',
-        description: 'Koperasi butuh tambahan dana untuk program pelatihan dan modal kerja.',
-        fullDescription: 'Dukungan untuk program pelatihan dan modal usaha kecil.',
-        story: 'Koperasi lokal butuh dana operasional untuk program pelatihan dan pendanaan.',
-        status: 'verified',
-        image: campaignImageOverrides[12],
-        location: 'Bali',
-        target: 20000000,
-        collected: 4000000,
-        donors: 18,
-        daysLeft: 50,
-        category: 'UMKM Terdampak Bencana',
-        organizer: 'Koperasi Lokal',
-        donations: [],
-        fundAllocation: [],
-        disbursementHistory: []
+    let cancelled = false;
+
+    (async () => {
+      const shouldSyncUsersToBackend = (typeof import.meta !== 'undefined' && typeof (import.meta as any).env !== 'undefined' && (import.meta as any).env.DEV) && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+      if (shouldSyncUsersToBackend) {
+        const storedUsers = loadRegisteredUsersFromStorage();
+        storedUsers.forEach((storedUser) => {
+          void fetch(apiUrl('/api/auth/register'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: storedUser.name,
+              email: storedUser.email,
+              password: storedUser.password
+            })
+          }).catch(() => null);
+        });
       }
-    ];
 
-    setCampaigns(prev => {
-      // Avoid duplicate insertion on HMR or re-mount
-      if (prev.some(c => c.id === 7)) return prev;
-      return [...prev, ...extraMockCampaigns];
-    });
-  }, [campaignsHydrated]);
+      const storedCampaigns = loadCampaignsFromStorage();
+      const localCampaigns = storedCampaigns !== null
+        ? normalizeCampaignsForDisplay(storedCampaigns, getApiBaseUrl())
+          .filter((campaign) => (
+            campaign.status !== 'rejected'
+            && !hiddenDemoCampaignIds.includes(campaign.id)
+          ))
+        : null;
+
+      if (!cancelled && localCampaigns !== null) {
+        setCampaigns(localCampaigns);
+      }
+
+      if (!cancelled) {
+        setCampaignsHydrated(true);
+      }
+
+      const synced = await syncCampaignsFromServer({ current: cancelled });
+      if (!cancelled && !synced && localCampaigns !== null) {
+        setCampaigns(localCampaigns);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
+<<<<<<< HEAD
     const storedCampaigns = loadCampaignsFromStorage();
     const apiBase = String(((import.meta as any).env && (import.meta as any).env.VITE_API_URL) || 'http://localhost:4000').replace(/\/$/, '');
     const originalImagesFor1to6: Record<number, string> = {
@@ -1027,26 +1235,28 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
         if (c && typeof c.id === 'number' && originalImagesFor1to6[c.id]) {
           return { ...c, image: originalImagesFor1to6[c.id] };
         }
+=======
+    const handleVisibilitySync = () => {
+      if (document.visibilityState === 'visible') {
+        void syncCampaignsFromServer();
+      }
+    };
 
-        if (c && typeof c.id === 'number' && campaignImageOverrides[c.id]) {
-          return { ...c, image: campaignImageOverrides[c.id] };
-        }
+    const handleFocusSync = () => {
+      void syncCampaignsFromServer();
+    };
+>>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
 
-        try {
-          if (typeof c.image === 'string' && c.image.startsWith('http')) {
-            const parsed = new URL(c.image);
-            // If image is already served via our proxy, keep it
-            if (!c.image.startsWith(`${apiBase}/image-proxy`)) {
-              // Proxy external images (avoid proxying same-origin or data/blob)
-              if (parsed.hostname !== window.location.hostname) {
-                return { ...c, image: `${apiBase}/image-proxy?url=${encodeURIComponent(c.image)}` };
-              }
-            }
-          }
-        } catch (err) {
-          // ignore malformed urls
-        }
+    const intervalId = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void syncCampaignsFromServer();
+      }
+    }, 15000);
 
+    window.addEventListener('focus', handleFocusSync);
+    document.addEventListener('visibilitychange', handleVisibilitySync);
+
+<<<<<<< HEAD
         return c;
       });
 
@@ -1061,7 +1271,21 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
 
     setCampaignsHydrated(true);
+=======
+    return () => {
+      window.removeEventListener('focus', handleFocusSync);
+      document.removeEventListener('visibilitychange', handleVisibilitySync);
+      window.clearInterval(intervalId);
+    };
+>>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
   }, []);
+
+  // Sync campaigns from server when entering admin page
+  useEffect(() => {
+    if (page === 'admin' && adminUser) {
+      void syncCampaignsFromServer();
+    }
+  }, [page, adminUser]);
 
   useEffect(() => {
     setCampaigns((prev) => {
@@ -1081,12 +1305,21 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   }, []);
 
   useEffect(() => {
+    if (!campaignsHydrated) {
+      return;
+    }
+
+    try {
+      window.localStorage.setItem(campaignStorageKey, JSON.stringify(campaigns));
+    } catch {
+      // ignore write failures in environments where localStorage is unavailable
+    }
+  }, [campaigns, campaignsHydrated]);
+
+  useEffect(() => {
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === campaignStorageKey) {
-        const storedCampaigns = loadCampaignsFromStorage();
-        if (storedCampaigns) {
-          setCampaigns(storedCampaigns);
-        }
+      if (event.key === campaignStorageKey || event.key === campaignUpdatedEventKey) {
+        void syncCampaignsFromServer();
       }
 
       if (event.key === adminSessionKey) {
@@ -1109,11 +1342,51 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       if (event.key === pendingPaymentsKey) {
         setPendingPayments(loadPendingPaymentsFromStorage());
       }
+
+      if (event.key === hiddenDemoCampaignIdsKey) {
+        const nextHiddenIds = loadHiddenDemoCampaignIdsFromStorage();
+        setHiddenDemoCampaignIds(nextHiddenIds);
+        setCampaigns((prev) => prev.filter((campaign) => !nextHiddenIds.includes(campaign.id)));
+      }
+
+      if (event.key === hiddenRejectedCampaignIdsKey) {
+        const nextHiddenIds = loadHiddenRejectedCampaignIdsFromStorage();
+        setHiddenRejectedCampaignIds(nextHiddenIds);
+        setCampaigns((prev) => prev.filter((campaign) => (
+          campaign.status !== 'rejected'
+          || !nextHiddenIds.includes(campaign.id)
+        )));
+      }
     };
 
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
+
+  useEffect(() => {
+    if (hiddenRejectedCampaignIds.length === 0) {
+      return;
+    }
+
+    setCampaigns((prev) => prev.filter((campaign) => (
+      campaign.status !== 'rejected'
+      || !hiddenRejectedCampaignIds.includes(campaign.id)
+    )));
+  }, [hiddenRejectedCampaignIds]);
+
+  useEffect(() => {
+    if (!campaignsHydrated) {
+      return;
+    }
+
+    setCampaigns((prev) => {
+      const filtered = prev.filter((campaign) => !legacyPaginationMockTitles.has(toSafeText(campaign.title)));
+      if (filtered.length === prev.length) {
+        return prev;
+      }
+      return filtered;
+    });
+  }, [campaignsHydrated]);
 
   useEffect(() => {
     if (!rejectUndoState && !deletedUserUndoState) {
@@ -1136,6 +1409,12 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       return;
     }
 
+    if (window.localStorage.getItem(campaignCleanupVersionKey) !== campaignCleanupVersion) {
+      window.localStorage.removeItem(campaignStorageKey);
+      window.localStorage.setItem(campaignCleanupVersionKey, campaignCleanupVersion);
+      return;
+    }
+
     const cleanedCampaigns = dedupeCampaigns(campaigns);
     if (cleanedCampaigns.length !== campaigns.length) {
       setCampaigns(cleanedCampaigns);
@@ -1144,6 +1423,40 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
     window.localStorage.setItem(campaignStorageKey, JSON.stringify(cleanedCampaigns));
   }, [campaigns, campaignsHydrated]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const response = await fetch(apiUrl('/api/auth/users'));
+        if (!response.ok) {
+          return;
+        }
+
+        const list = await response.json();
+        if (cancelled || !Array.isArray(list)) {
+          return;
+        }
+
+        const mapped = list
+          .map((item: any) => ({
+            id: Number(item.id),
+            name: toSafeText(item.name),
+            email: toSafeText(item.email)
+          }))
+          .filter((item: ServerUserRow) => Number.isFinite(item.id) && item.email.length > 0);
+
+        setServerUsers(mapped);
+      } catch {
+        // keep local fallback
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') {
@@ -1186,7 +1499,13 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   const campaignsSortedByTime = [...campaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
   const mockCampaigns = campaignsSortedByTime.filter((campaign) => campaign.id >= 1000);
   const realCampaigns = campaignsSortedByTime.filter((campaign) => campaign.id < 1000);
-  const campaignsForDisplay = [...mockCampaigns, ...realCampaigns];
+  const campaignsForDisplay = normalizeCampaignsForDisplay([...mockCampaigns, ...realCampaigns], getApiBaseUrl())
+    .filter((campaign) => (
+      campaign.status !== 'rejected'
+      && !hiddenDemoCampaignIds.includes(campaign.id)
+      && !hiddenRejectedCampaignIds.includes(campaign.id)
+      && !legacyPaginationMockTitles.has(toSafeText(campaign.title))
+    ));
 
   const donationHistoryForDisplay = campaignsForDisplay.flatMap((campaign) => {
     if (campaign.donations && campaign.donations.length > 0) {
@@ -1239,7 +1558,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     { id: 4, name: 'Sari Wulandari', email: 'sari@bantusesama.id', role: 'user', status: 'active', campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === 'sari@bantusesama.id').length },
   ];
 
-  const registeredUserRows: AdminUserRow[] = registeredUsers
+  const serverRegisteredRows: AdminUserRow[] = (serverUsers.length > 0 ? serverUsers : registeredUsers)
     .filter((account) => !baseAdminUsers.some((item) => item.email === account.email))
     .map((account, index) => ({
       id: 1000 + index,
@@ -1250,8 +1569,20 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === account.email).length
     }));
 
-  const adminUsers = [...baseAdminUsers, ...registeredUserRows]
+  const localRegisteredRows: AdminUserRow[] = registeredUsers
+    .filter((account) => !baseAdminUsers.some((item) => item.email === account.email))
+    .map((account, index) => ({
+      id: 2000 + index,
+      name: account.name,
+      email: account.email,
+      role: 'user',
+      status: 'active',
+      campaignCount: campaigns.filter((campaign) => campaign.creatorEmail === account.email).length
+    }));
+
+  const adminUsers = [...baseAdminUsers, ...serverRegisteredRows, ...localRegisteredRows]
     .filter((item) => !deletedUserEmails.includes(item.email))
+    .filter((item, index, arr) => arr.findIndex((other) => other.email === item.email) === index)
     .sort((a, b) => a.id - b.id);
 
   const clearRejectUndoTimer = () => {
@@ -1268,11 +1599,11 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
   };
 
-  const startRejectUndo = (campaignId: number, previousStatus?: CampaignStatus) => {
+  const startRejectUndo = (campaignId: number, previousCampaign?: CampaignRecord) => {
     clearRejectUndoTimer();
 
     const expiresAt = Date.now() + 5000;
-    setRejectUndoState({ campaignId, previousStatus, expiresAt });
+    setRejectUndoState({ campaignId, previousCampaign, expiresAt });
     rejectUndoTimeoutRef.current = window.setTimeout(() => {
       setRejectUndoState(null);
       rejectUndoTimeoutRef.current = null;
@@ -1287,15 +1618,34 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       return;
     }
 
-    const { campaignId, previousStatus } = rejectUndoState;
-    setCampaigns((prev) => prev.map((campaign) => (
-      campaign.id === campaignId
-        ? { ...campaign, status: previousStatus }
-        : campaign
-    )));
+    const { campaignId, previousCampaign } = rejectUndoState;
+
+    setHiddenRejectedCampaignIds((prev) => {
+      const next = prev.filter((id) => id !== campaignId);
+      saveHiddenRejectedCampaignIdsToStorage(next);
+      return next;
+    });
+
+    setCampaigns((prev) => {
+      if (!previousCampaign) {
+        return prev;
+      }
+      const filtered = prev.filter((campaign) => campaign.id !== campaignId);
+      return [...filtered, previousCampaign];
+    });
 
     clearRejectUndoTimer();
     setRejectUndoState(null);
+
+    void (async () => {
+      try {
+        await updateCampaignStatusOnServer(campaignId, 'pending');
+        await syncCampaignsFromServer();
+      } catch (err) {
+        console.error('Error undoing rejected campaign:', err);
+        window.alert('Gagal membatalkan penolakan kampanye. Silakan refresh halaman untuk memastikan status terbaru.');
+      }
+    })();
   };
 
   const startDeletedUserUndo = (email: string, userData: StoredUser | null, removedCampaigns: CampaignRecord[]) => {
@@ -1392,6 +1742,21 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       }
     };
 
+  const updateCampaignStatusOnServer = async (campaignId: number, status: CampaignStatus) => {
+    const response = await fetch(apiUrl(`/api/campaigns/${campaignId}/status`), {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status })
+    });
+
+    if (!response.ok) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.error || 'Gagal memperbarui status kampanye');
+    }
+
+    return response.json();
+  };
+
     const clearProcessedWithdrawals = () => {
       setWithdrawalRequests((prev) => prev.filter((r) => r.status !== 'Success' && r.status !== 'Rejected'));
     };
@@ -1446,7 +1811,15 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
   useEffect(() => {
     setCurrentPage(1);
     setCampaignListFadeOut(false);
-  }, [selectedCategory, sortBy, campaigns]);
+  }, [selectedCategory, sortBy]);
+
+  useEffect(() => {
+    if (currentPage <= totalPages) {
+      return;
+    }
+
+    setCurrentPage(totalPages);
+  }, [totalPages, currentPage]);
 
   useEffect(() => () => {
     if (campaignPageTransitionTimerRef.current) {
@@ -1474,7 +1847,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
   }, [page]);
 
-  const selectedCampaignData = campaigns.find(c => c.id === selectedCampaign) ?? (selectedCampaignSnapshotRef.current?.id === selectedCampaign ? selectedCampaignSnapshotRef.current : null);
+  const selectedCampaignData = selectedCampaignSource === 'snapshot' && selectedCampaignSnapshotRef.current?.id === selectedCampaign
+    ? selectedCampaignSnapshotRef.current
+    : campaigns.find(c => c.id === selectedCampaign) ?? (selectedCampaignSnapshotRef.current?.id === selectedCampaign ? selectedCampaignSnapshotRef.current : null);
 
   useEffect(() => {
     if (selectedCampaignData) {
@@ -1569,7 +1944,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           }}
           onUpdateCampaign={(campaignId, updates) => {
             setCampaigns((prev) => prev.map((campaign) => (
-              campaign.id === campaignId ? { ...campaign, ...updates } : campaign
+              campaign.id === campaignId ? ({ ...campaign, ...updates } as CampaignRecord) : campaign
             )));
           }}
           onDonationSuccess={(amount, donorInfo) => {
@@ -1635,6 +2010,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           setAdminUser(admin);
           window.localStorage.setItem(adminSessionKey, JSON.stringify(admin));
           navigatePage('admin');
+          void syncCampaignsFromServer();
         }}
       />
     );
@@ -1670,6 +2046,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
               selectedCampaignSnapshotRef.current = normalizedCampaign;
               setCampaigns((prev) => [...prev, normalizedCampaign]);
               setSelectedCampaign(normalizedCampaign.id);
+              setSelectedCampaignSource('snapshot');
               setPage(null);
               window.history.pushState(
                 { view: 'campaign', campaignId: normalizedCampaign.id },
@@ -1749,7 +2126,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                         Anda adalah donatur rutin aktif untuk {recurringDonationStatus.campaignTitle}.
                       </p>
                       <p className="mt-2 text-xs text-emerald-600">
-                        Nominal bulanan: Rp {recurringDonationStatus.amount.toLocaleString('id-ID')}
+                        Nominal bulanan: Rp {Number(recurringDonationStatus.amount || 0).toLocaleString('id-ID')}
                       </p>
                         <div className="mt-3">
                           <button
@@ -1860,23 +2237,87 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           </div>
         )}
         <AdminDashboard
-          campaigns={campaignsForDisplay}
+          campaigns={campaigns.filter((c) => !legacyPaginationMockTitles.has(toSafeText(c.title)))}
           users={adminUsers}
           withdrawalRequests={withdrawalRequests}
           user={adminUser}
           onVerifyCampaign={(campaignId) => {
-            clearRejectUndoTimer();
-            setRejectUndoState(null);
-            setCampaigns((prev) => prev.map((campaign) => (
-              campaign.id === campaignId ? { ...campaign, status: 'verified' } : campaign
-            )));
+            void (async () => {
+              clearRejectUndoTimer();
+              setRejectUndoState(null);
+
+              const nextHiddenRejectedIds = hiddenRejectedCampaignIds.filter((id) => id !== campaignId);
+              if (nextHiddenRejectedIds.length !== hiddenRejectedCampaignIds.length) {
+                setHiddenRejectedCampaignIds(nextHiddenRejectedIds);
+                saveHiddenRejectedCampaignIdsToStorage(nextHiddenRejectedIds);
+              }
+
+              try {
+                await updateCampaignStatusOnServer(campaignId, 'verified');
+                await syncCampaignsFromServer();
+                try {
+                  window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
+                } catch {
+                  // ignore write failures
+                }
+              } catch (err) {
+                console.error(err);
+                window.alert('Gagal memverifikasi kampanye. Coba lagi.');
+              }
+            })();
           }}
           onRejectCampaign={(campaignId) => {
-            const previousStatus = campaigns.find((campaign) => campaign.id === campaignId)?.status;
-            setCampaigns((prev) => prev.map((campaign) => (
-              campaign.id === campaignId ? { ...campaign, status: 'rejected' } : campaign
-            )));
-            startRejectUndo(campaignId, previousStatus);
+            const previousCampaign = campaigns.find((campaign) => campaign.id === campaignId);
+            const nextHiddenRejectedIds = hiddenRejectedCampaignIds.includes(campaignId)
+              ? hiddenRejectedCampaignIds
+              : [...hiddenRejectedCampaignIds, campaignId];
+            const nextHiddenDemoIds = campaignId <= 6
+              ? (hiddenDemoCampaignIds.includes(campaignId) ? hiddenDemoCampaignIds : [...hiddenDemoCampaignIds, campaignId])
+              : hiddenDemoCampaignIds;
+
+            void (async () => {
+              try {
+                console.log(`[Reject] Menolak kampanye ${campaignId}...`);
+                const statusUpdateResult = await updateCampaignStatusOnServer(campaignId, 'rejected');
+                console.log(`[Reject] Status update result:`, statusUpdateResult);
+
+                const nextCampaigns = campaigns.filter((campaign) => campaign.id !== campaignId);
+                setCampaigns(nextCampaigns);
+                try {
+                  window.localStorage.setItem(campaignStorageKey, JSON.stringify(nextCampaigns));
+                } catch {
+                  // ignore write failures
+                }
+
+                setHiddenRejectedCampaignIds(nextHiddenRejectedIds);
+                saveHiddenRejectedCampaignIdsToStorage(nextHiddenRejectedIds);
+
+                if (campaignId <= 6) {
+                  setHiddenDemoCampaignIds(nextHiddenDemoIds);
+                  saveHiddenDemoCampaignIdsToStorage(nextHiddenDemoIds);
+                }
+
+                startRejectUndo(campaignId, previousCampaign);
+
+                // Refresh from server to ensure public campaigns are consistent with DB.
+                const syncSuccess = await syncCampaignsFromServer(undefined, nextHiddenDemoIds);
+                console.log(`[Reject] Sync success:`, syncSuccess);
+                if (!syncSuccess) {
+                  console.warn('Sync dari server gagal, mencoba sync ulang...');
+                  await new Promise((resolve) => window.setTimeout(resolve, 500));
+                  await syncCampaignsFromServer(undefined, nextHiddenDemoIds);
+                }
+
+                try {
+                  window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
+                } catch {
+                  // ignore write failures
+                }
+              } catch (err) {
+                console.error('Error menolak kampanye:', err);
+                window.alert('Gagal menolak kampanye di server. Kampanye tetap ditampilkan sampai proses berhasil. Silakan coba lagi.');
+              }
+            })();
           }}
           onUpdateWithdrawalStatus={updateWithdrawalRequestStatus}
           onClearWithdrawals={clearProcessedWithdrawals}

@@ -3,6 +3,7 @@ import { MapPin, Users, Calendar, Share2, Heart, TrendingUp, Shield, FileText, F
 import { TransparencyChart } from './TransparencyChart';
 import { useEffect, useState, useRef } from 'react';
 import { PaymentModal } from './PaymentModal';
+import { apiUrl, getApiBaseUrl } from '../lib/apiBaseUrl';
 
 interface Campaign {
   id: number;
@@ -19,6 +20,8 @@ interface Campaign {
   category: string;
   organizer: string;
   story: string;
+  status?: string;
+  goal?: number;
   fundAllocation: Array<{name: string; value: number; color: string}>;
   disbursementHistory: Array<{date: string; amount: number; purpose: string}>;
   donations?: Array<{name: string; amount: number; message: string; timestamp: number}>;
@@ -154,7 +157,8 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   const [editError, setEditError] = useState('');
   const [editTitle, setEditTitle] = useState(campaign.title);
   const [editLocation, setEditLocation] = useState(campaign.location);
-  const [editTarget, setEditTarget] = useState(String(campaign.target));
+  const effectiveTarget = campaign.target > 0 ? campaign.target : (campaign.goal ?? 0);
+  const [editTarget, setEditTarget] = useState(String(effectiveTarget));
   const [editDaysLeft, setEditDaysLeft] = useState(String(campaign.daysLeft));
   const [editStory, setEditStory] = useState(campaign.story);
   const [editImage, setEditImage] = useState(campaign.image);
@@ -166,10 +170,60 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   const [withdrawNote, setWithdrawNote] = useState('');
   const [withdrawError, setWithdrawError] = useState('');
   
+<<<<<<< HEAD
+=======
+  // Apply same fallback logic as CampaignCard for demo data (must be before generateMockDonations)
+  const filledTarget = campaign.target > 0 ? campaign.target : (campaign.goal ?? 5000000);
+  const filledCollected = campaign.collected > 0 ? campaign.collected : Math.max(500000, Math.round(filledTarget * 0.15));
+  const filledDonors = campaign.donors > 0 ? campaign.donors : 2;
+  
+  // Generate mock data berbeda untuk setiap campaign berdasarkan campaign ID
+  const generateMockDonations = (campaignId: number) => {
+    const donors = [
+      'Siti Nurhaliza', 'Bambang Wijaya', 'Rina Sutrisno', 'Ahmad Suryanto', 'Dewi Lestari',
+      'Rudi Hartono', 'Sinta Paramita', 'Doni Pratama', 'Ratna Wijaya', 'Hendri Kusuma',
+      'Anita Soeharto', 'Budi Santoso', 'Citra Dewi', 'Eka Putra', 'Farah Nabila'
+    ];
+    const messages = [
+      'Semoga bisa membantu', 'Perjuangan membutuhkan dukungan', 'Semoga berkah dan lancar',
+      'Semangat terus!', 'Semoga lancar selalu', 'Bangkit dan berkembang', 'Untuk masa depan yang lebih baik',
+      'Doa dan dukungan bersama'
+    ];
+    
+    // Use campaign ID as seed untuk generate different data per campaign
+    let seed = campaignId;
+    const seededRandom = () => {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    };
+    
+    const mockCount = filledDonors; // Use filled donors count
+    const mockData = [];
+    
+    for (let i = 0; i < mockCount; i++) {
+      const donorIdx = Math.floor(seededRandom() * donors.length);
+      const messageIdx = Math.floor(seededRandom() * (messages.length + 1));
+      const amount = (Math.floor(seededRandom() * 15) + 1) * 100000; // Rp 100k - 1.5jt
+      const hoursAgo = Math.floor(seededRandom() * 72) + 1; // 1-72 jam lalu
+      
+      mockData.push({
+        name: donors[donorIdx],
+        amount: amount,
+        message: messageIdx < messages.length ? messages[messageIdx] : '',
+        timestamp: Date.now() - hoursAgo * 60 * 60 * 1000
+      });
+    }
+    
+    return mockData;
+  };
+  
+  const mockDonations = useMemo(() => generateMockDonations(campaign.id), [campaign.id, filledDonors]);
+  
+>>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
   const [fetchedDonations, setFetchedDonations] = useState<Array<{name: string; amount: number; message: string; timestamp: number}> | null>(null);
   const [loadingDonations, setLoadingDonations] = useState(false);
 
-  const percentage = Math.min((campaign.collected / campaign.target) * 100, 100);
+  const percentage = filledTarget > 0 ? Math.min((filledCollected / filledTarget) * 100, 100) : 0;
   const canEdit = user?.email && campaign.creatorEmail && user.email.toLowerCase() === campaign.creatorEmail.toLowerCase();
   const isVerified = campaign.status !== 'pending' && campaign.status !== 'rejected';
   const statusLabel = campaign.status === 'pending'
@@ -252,7 +306,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
 
   // Close share menu when clicking outside
   useEffect(() => {
-    function handleOutsideClick(e: MouseEvent) {
+    function handleOutsideClick(e: Event) {
       if (!showShareMenu) return;
       const target = e.target as Node | null;
       if (shareMenuRef.current && target && !shareMenuRef.current.contains(target)) {
@@ -290,14 +344,18 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
       if (campaign.donors > 0) {
         setLoadingDonations(true);
         (async () => {
+<<<<<<< HEAD
             const envBaseUrl = String((import.meta as any).env?.VITE_API_URL || '').trim();
             const apiBaseUrl = envBaseUrl
               ? envBaseUrl.replace(/\/$/, '')
               : (typeof window !== 'undefined' && window.location?.origin
                 ? window.location.origin.replace(/\/$/, '')
                 : 'http://localhost:8080');
+=======
+            const apiBaseUrl = getApiBaseUrl();
+>>>>>>> 280e85d7315dd39666e8bdf49ec1442e64d22120
           try {
-            const res = await fetch(`${apiBaseUrl}/api/donations?campaignId=${campaign.id}`);
+            const res = await fetch(apiUrl(`/api/donations?campaignId=${campaign.id}`));
             if (!res.ok) {
               const text = await res.text().catch(() => '');
               console.error('Failed to fetch donations: non-OK response', res.status, text);
@@ -535,14 +593,8 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                   </div>
                   <div className="flex items-center gap-2">
                     <Users className="w-5 h-5" />
-                    <span>{campaign.donors} donatur</span>
+                    <span>{filledDonors} donatur</span>
                   </div>
-                  <div className="flex items-center gap-2">
-                    <Calendar className="w-5 h-5" />
-                    <span>{campaign.daysLeft} hari lagi</span>
-                  </div>
-                </div>
-
                 {isEditing && canEdit && (
                   <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 p-4 space-y-4">
                     {editError && (
@@ -701,6 +753,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                     </div>
                   </div>
                 )}
+              </div>
 
                 <div className="border-t border-gray-200 pt-6">
                   <div className="flex gap-4 mb-6">
@@ -735,7 +788,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                       }`}
                     >
                       <Heart className="w-5 h-5 inline mr-2" />
-                      Donatur ({campaign.donors})
+                      Donatur ({filledDonors})
                     </button>
                   </div>
 
@@ -764,18 +817,18 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                   {activeTab === 'donors' && (
                     <div className="space-y-4">
                       {donorEntries.length === 0 ? (
-                        campaign.donors === 0 ? (
+                        campaign.donors === 0 && donorEntries.length === 0 ? (
                           <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-600">
                             Belum ada donasi untuk kampanye ini.
                           </div>
                         ) : loadingDonations ? (
                           <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-600">
                             <p className="font-medium text-gray-900">Memuat data donatur...</p>
-                            <p className="text-sm text-gray-600 mt-2">Terdapat {campaign.donors} donatur</p>
+                            <p className="text-sm text-gray-600 mt-2">Terdapat {filledDonors} donatur</p>
                           </div>
                         ) : (
                           <div className="rounded-lg border border-dashed border-gray-300 bg-gray-50 p-6 text-center text-gray-600 space-y-2">
-                            <p className="font-medium text-gray-900">Terdapat {campaign.donors} donatur</p>
+                            <p className="font-medium text-gray-900">Terdapat {filledDonors} donatur</p>
                             <p className="text-sm text-gray-600">Rincian donasi belum tersedia untuk ditampilkan.</p>
                           </div>
                         )
@@ -797,9 +850,9 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                               )}
                             </div>
                           ))}
-                          {campaign.donors > 5 && (
+                          {filledDonors > 5 && (
                             <div className="p-4 text-center text-sm text-gray-600">
-                              Menampilkan 5 dari {campaign.donors} donatur terbaru
+                              Menampilkan 5 dari {filledDonors} donatur terbaru
                             </div>
                           )}
                         </>
@@ -826,10 +879,10 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                 </div>
                 <div>
                   <p className="font-bold text-2xl text-gray-900">
-                    Rp {campaign.collected.toLocaleString('id-ID')}
+                    Rp {filledCollected.toLocaleString('id-ID')}
                   </p>
                   <p className="text-gray-600">
-                    dari target Rp {campaign.target.toLocaleString('id-ID')}
+                    dari target Rp {filledTarget.toLocaleString('id-ID')}
                   </p>
                 </div>
               </div>
@@ -878,7 +931,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                       <p className="font-medium text-gray-900">Request Withdrawal</p>
                       <p className="text-sm text-gray-600">Cairkan dana lewat pengajuan ke admin terlebih dahulu.</p>
                     </div>
-                    <p className="text-xs text-gray-500 whitespace-nowrap">Terkumpul Rp {campaign.collected.toLocaleString('id-ID')}</p>
+                    <p className="text-xs text-gray-500 whitespace-nowrap">Terkumpul Rp {filledCollected.toLocaleString('id-ID')}</p>
                   </div>
                   <div className="space-y-3">
                     <div>
@@ -1007,7 +1060,7 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
 }
 
 // add share functionality below component export
-export function shareCampaign(campaign: { id: number; title: string }) {
+export function shareCampaign(campaign: Campaign) {
   const url = `${window.location.origin}/?campaign=${campaign.id}`;
   const encodedUrl = encodeURIComponent(url);
   const encodedTitle = encodeURIComponent(campaign.title);
@@ -1029,7 +1082,7 @@ export function shareCampaign(campaign: { id: number; title: string }) {
     facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedTitle}`,
     twitter: `https://twitter.com/intent/tweet?text=${text}&url=${encodedUrl}`,
     telegram: `https://t.me/share/url?url=${encodedUrl}&text=${text}`,
-    email: `mailto:?subject=${encodedTitle}&body=Bantulah kampanye "${campaign.title}" di BantuSesama: ${url}`
+    email: `mailto:?subject=${encodedTitle}&body=Bantulah kampanye ${encodedTitle} di BantuSesama: ${url}`
   };
 
   // Copy to clipboard as default
@@ -1038,7 +1091,7 @@ export function shareCampaign(campaign: { id: number; title: string }) {
   });
 }
 
-export function getShareOptions(campaign: { id: number; title: string }) {
+export function getShareOptions(campaign: Campaign) {
   const url = `${window.location.origin}/?campaign=${campaign.id}`;
   const encodedUrl = encodeURIComponent(url);
   const encodedTitle = encodeURIComponent(campaign.title);

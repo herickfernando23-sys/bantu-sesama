@@ -27,6 +27,14 @@ export function ImageWithFallback({ src, alt, className = '' }: ImageWithFallbac
     }
   }
 
+  if (!src) {
+    return (
+      <div className={`bg-gradient-to-br ${colorClass} flex items-center justify-center ${className}`}>
+        <span className="text-white text-center text-lg font-semibold px-4">{alt}</span>
+      </div>
+    );
+  }
+
   if (error) {
     return (
       <div className={`bg-gradient-to-br ${colorClass} flex items-center justify-center ${className}`}>

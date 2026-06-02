@@ -1,5 +1,6 @@
 const path = require('path');
-require('dotenv').config({ path: path.resolve(__dirname, '../.env') });
+require('dotenv').config({ path: path.resolve(__dirname, '.env') });
+require('dotenv').config({ path: path.resolve(__dirname, '../.env'), override: false });
 const express = require('express');
 const bodyParser = require('body-parser');
 const cors = require('cors');
@@ -18,7 +19,7 @@ const recurringService = require('./services/recurringPaymentService');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
-const corsOrigin = process.env.CORS_ORIGIN;
+const corsOrigin = String(process.env.CORS_ORIGIN || '').trim().replace(/\/+$/, '');
 
 app.set('trust proxy', process.env.TRUST_PROXY === '1' ? 1 : 0);
 
@@ -49,19 +50,67 @@ const corsOptions = {
 if (!isProduction) {
   // In development, allow localhost on any port
   corsOptions.origin = function (origin, callback) {
+    // Allow direct browser navigation (no origin) and localhost/127.0.0.1
     if (!origin || /^http:\/\/localhost:\d+$/.test(origin) || /^http:\/\/127\.0\.0\.1:\d+$/.test(origin)) {
       callback(null, true);
-    } else {
-      callback(new Error('CORS policy violation'));
+      return;
     }
+
+    // Allow local network (e.g., http://192.168.x.y:5173) when explicitly enabled
+    const allowLocalNet = String(process.env.ALLOW_LOCAL_NET || '').toLowerCase() === '1';
+    if (allowLocalNet && /^http:\/\/192\.168\.[0-9]{1,3}\.[0-9]{1,3}(:\d+)?$/.test(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    // Also allow a specific CORS origin if set in env for convenience
+    try {
+      const configured = String(process.env.CORS_ORIGIN || '').trim();
+      if (configured && origin === configured) {
+        callback(null, true);
+        return;
+      }
+    } catch (e) {
+      // ignore
+    }
+
+    callback(new Error('CORS policy violation'));
   };
 } else {
-  // In production, use specific origin from env
-  corsOptions.origin = corsOrigin || 'https://bantu-sesama.com';
+  // In production, prefer a specific origin from env.
+  // If CORS_ORIGIN is not configured, allow the request origin so the API
+  // can still serve from alternative frontends like preprod or Vercel staging.
+  corsOptions.origin = corsOrigin || true;
 }
 
 app.use(cors(corsOptions));
 app.use(bodyParser.json());
+
+app.get('/', (req, res) => {
+  res.json({
+    status: 'ok',
+    service: 'bantu-sesama-api',
+    health: '/health',
+    apiBase: '/api'
+  });
+});
+
+app.get('/api', (req, res) => {
+  res.json({
+    status: 'ok',
+    message: 'Bantu Sesama API aktif',
+    routes: [
+      '/api/auth',
+      '/api/campaigns',
+      '/api/payments',
+      '/api/chatbot',
+      '/api/donations',
+      '/api/recurring',
+      '/api/tips',
+      '/api/sponsor-banners'
+    ]
+  });
+});
 
 // Simple image proxy to avoid client-side CORS/CSP issues during development.
 app.get('/image-proxy', (req, res) => {
@@ -133,7 +182,26 @@ app.use('/api/sponsor-banners', sponsorBannersRoutes);
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
+// Route not found handler
+app.use((req, res) => {
+  res.status(404).json({
+    error: 'Route not found',
+    method: req.method,
+    path: req.originalUrl
+  });
+});
+
+// Global error handler
+app.use((err, req, res, next) => {
+  console.error('Unhandled error:', err);
+  if (res.headersSent) return next(err);
+  res.status(err.status || 500).json({
+    error: err.message || 'Internal server error'
+  });
+});
+
 const PORT = process.env.PORT || 4000;
+const shouldSyncSchema = String(process.env.DB_SYNC || '').toLowerCase() === 'true' || (!isProduction && String(process.env.DB_SYNC || '').toLowerCase() !== 'false');
 
 // Global cron job reference for recurring donations
 let recurringCronJob = null;
@@ -175,10 +243,14 @@ function setupRecurringCronJob() {
 
 async function start() {
   try {
-    try {
-      await sequelize.sync({ alter: true });
-    } catch (err) {
-      console.error('Failed to sync DB (continuing without sync):', err && err.message ? err.message : err);
+    if (shouldSyncSchema) {
+      try {
+        await sequelize.sync({ alter: true });
+      } catch (err) {
+        console.error('Failed to sync DB (continuing without sync):', err && err.message ? err.message : err);
+      }
+    } else {
+      await sequelize.authenticate();
     }
 
     // Setup recurring donations scheduler

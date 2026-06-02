@@ -1,5 +1,7 @@
 import { useEffect, useState, useRef } from 'react';
+import { apiUrl, getApiBaseUrl } from '../lib/apiBaseUrl';
 
+const apiBaseUrl = getApiBaseUrl();
 const midtransClientKey = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_CLIENT_KEY) || '').trim();
 const viteMidtransIsProduction = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_IS_PRODUCTION) || '').toLowerCase() === 'true';
 
@@ -68,7 +70,7 @@ export function TipWidget({ user }: { user?: { name?: string; email?: string } |
 
     setLoading(true);
     try {
-      const resp = await fetch('/api/payments/create-tip-intent', {
+      const resp = await fetch(apiUrl('/api/payments/create-tip-intent'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: numeric, donorName, donorEmail, isAnonymous, message: 'Tips Sukarela', paymentMethod: 'ewallet' })
@@ -82,13 +84,31 @@ export function TipWidget({ user }: { user?: { name?: string; email?: string } |
       }
       const data = await resp.json();
 
-      // If Midtrans client key is not configured or Snap unavailable, fallback: mark tip succeeded on server
-      if (!midtransClientKey) {
+      const isDemoTransaction = Boolean(data.demoMode) || !midtransClientKey || String(data.transactionToken || '').startsWith('DEMO_');
+
+      if (isDemoTransaction) {
         try {
-          await fetch('/api/payments/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipId: data.tipId, orderId: data.orderId, transactionStatus: 'settlement' }) });
+          const confirmResp = await fetch(apiUrl('/api/payments/confirm'), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              tipId: data.tipId,
+              orderId: data.orderId,
+              transactionStatus: 'settlement'
+            })
+          });
+
+          if (!confirmResp.ok) {
+            const text = await confirmResp.text().catch(() => null);
+            let body = {} as any;
+            try { body = text ? JSON.parse(text) : {}; } catch (e) { body = {}; }
+            const serverMsg = (body && body.error) || text || 'Gagal mencatat tip di server';
+            throw new Error(serverMsg);
+          }
+
           setSuccess(`Terima kasih! Tips Rp ${numeric.toLocaleString('id-ID')} berhasil tercatat.`);
         } catch (err) {
-          setError('Gagal mencatat tip di server');
+          setError(err instanceof Error ? err.message : 'Gagal mencatat tip di server');
         }
         return;
       }
@@ -100,7 +120,7 @@ export function TipWidget({ user }: { user?: { name?: string; email?: string } |
         onSuccess: async (result: Record<string, any>) => {
           paymentCompletionRef.current = true;
           try {
-            await fetch('/api/payments/confirm', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipId: data.tipId, orderId: data.orderId, transactionStatus: String(result.transaction_status || '') }) });
+            await fetch(apiUrl('/api/payments/confirm'), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ tipId: data.tipId, orderId: data.orderId, transactionStatus: String(result.transaction_status || '') }) });
             setSuccess(`Terima kasih! Tips Rp ${numeric.toLocaleString('id-ID')} berhasil.`);
           } catch (err) {
             setError('Konfirmasi pembayaran gagal');

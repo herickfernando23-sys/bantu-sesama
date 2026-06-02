@@ -1,11 +1,47 @@
 const { Sequelize } = require('sequelize');
 const path = require('path');
+const dns = require('dns');
 require('dotenv').config();
 
+try {
+  if (typeof dns.setDefaultResultOrder === 'function') {
+    dns.setDefaultResultOrder('ipv4first');
+  }
+} catch (err) {
+  // Ignore if the runtime does not support this API.
+}
+
 const databaseUrl = process.env.DATABASE_URL || 'postgres://postgres:password@localhost:5432/microcrowd';
+const databaseSslEnabled = String(process.env.DATABASE_SSL || '').toLowerCase() === 'true';
+
+let databaseHost = '';
+try {
+  databaseHost = new URL(databaseUrl).hostname;
+} catch (err) {
+  databaseHost = '';
+}
+
+const shouldUseSsl = databaseSslEnabled || databaseHost.endsWith('.supabase.co') || databaseHost.includes('supabase');
 
 const sequelize = new Sequelize(databaseUrl, {
-  logging: false
+  logging: false,
+  pool: {
+    max: 2,            // Reduced from 5 for Supabase free tier
+    min: 0,            // Close idle connections faster
+    acquire: 30000,
+    idle: 5000         // Reduce idle timeout from 10s to 5s
+  },
+  dialectOptions: shouldUseSsl
+    ? {
+        family: 4,
+        ssl: {
+          require: true,
+          rejectUnauthorized: false
+        }
+      }
+    : undefined,
+  connectTimeoutMs: 30000,  // Time to try connection before timeout
+  requestTimeout: 30000     // Time for each request
 });
 
 const User = require('./user')(sequelize);

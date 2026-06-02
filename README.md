@@ -20,6 +20,18 @@
   - Deployment: `server/Dockerfile` and `docker-compose.yml` added to run Postgres + backend for public hosting.
   - HTTPS readiness: backend trusts reverse-proxy headers and redirects to HTTPS in production when `x-forwarded-proto` is not `https`.
 
+## Deploy online
+
+Recommended setup:
+
+1. Frontend: deploy the repo root to Vercel.
+2. Backend: deploy `server/` to Railway or Render.
+3. Database: use a cloud PostgreSQL instance.
+4. Set `VITE_API_URL` in Vercel to the public backend base URL, for example `https://your-backend.example.com`.
+5. Set `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`, `MIDTRANS_SERVER_KEY`, `MIDTRANS_CLIENT_KEY`, and `MIDTRANS_IS_PRODUCTION` on the backend host.
+
+Without `VITE_API_URL`, the frontend will not know where to send `/api/...` requests in production.
+
   Setup quick start (backend):
 
   1. In `server/` run:
