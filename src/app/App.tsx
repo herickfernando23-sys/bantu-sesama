@@ -581,6 +581,10 @@ export default function App() {
   const [page, setPage] = useState<Page>(initialPage);
   const [user, setUser] = useState<AppUser | null>(persistedUser);
   const [adminUser, setAdminUser] = useState<AppUser | null>(persistedAdminUser);
+  const campaignStorageKey = 'bantusesama-campaigns';
+  const campaignUpdatedEventKey = 'bantusesama-campaigns-updated';
+  const hiddenRejectedCampaignIdsKey = 'bantusesama-hidden-rejected-campaign-ids';
+  const deletedUserEmailsKey = 'bantusesama-deleted-user-emails';
   const initialDeletedUserEmails = loadDeletedUserEmailsFromStorage().map(normalizeEmail);
   const [deletedUserEmails, setDeletedUserEmails] = useState<string[]>(initialDeletedUserEmails);
   const [registeredUsers, setRegisteredUsers] = useState<StoredUser[]>(() => loadRegisteredUsersFromStorage().filter((account) => !initialDeletedUserEmails.includes(normalizeEmail(account.email))));
@@ -604,10 +608,6 @@ export default function App() {
   const isUpdatingCampaignsLocallRef = useRef(false);
   const lastCampaignSyncAtRef = useRef(0);
 
-  const campaignStorageKey = 'bantusesama-campaigns';
-  const campaignUpdatedEventKey = 'bantusesama-campaigns-updated';
-  const hiddenRejectedCampaignIdsKey = 'bantusesama-hidden-rejected-campaign-ids';
-  const deletedUserEmailsKey = 'bantusesama-deleted-user-emails';
 
   function loadDeletedUserEmailsFromStorage() {
     if (typeof window === 'undefined') {
