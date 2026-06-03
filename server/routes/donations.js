@@ -34,17 +34,18 @@ router.get('/', async (req, res) => {
       ],
       order: [['createdAt', 'DESC']],
       limit: 100,
-      attributes: ['id', 'amount', 'createdAt', 'paymentMethod']
+      // include donorName/message so we can prefer the stored donor name
+      attributes: ['id', 'amount', 'createdAt', 'paymentMethod', 'donorName', 'message', 'isAnonymous']
     });
 
     // Format response
     const formattedDonations = donations.map(donation => {
-      // Use anonymous name if donor chose anonymous, otherwise use user name or default name
-      const donorName = donation.User?.name || 'Anonymous';
+      // Prefer donation.donorName if present, otherwise use associated User name
+      const donorName = donation.isAnonymous ? 'Anonymous' : (donation.donorName || donation.User?.name || 'Anonymous');
       return {
         name: donorName,
         amount: Number(donation.amount),
-        message: '', // We don't store messages in Donation model currently
+        message: donation.message || '',
         timestamp: new Date(donation.createdAt).getTime()
       };
     });

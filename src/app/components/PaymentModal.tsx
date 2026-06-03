@@ -617,6 +617,7 @@ export function PaymentModal({
               paymentCompletionRef.current = true;
               clearTimeout(snapTimeoutHandle);
               console.info('Midtrans onSuccess', { result, donationId: donationIdForCallback, orderId: orderIdForCallback });
+              let confirmResult: Record<string, unknown> | null = null;
               try {
                 const response = await fetch(apiUrl('/api/payments/confirm'), {
                   method: 'POST',
@@ -637,11 +638,50 @@ export function PaymentModal({
                   throw new Error(body.error || 'Konfirmasi pembayaran gagal');
                 }
 
-                const donationAmount = Number(amount);
-                completeSuccessfulPayment(donationAmount, `Donasi Rp ${donationAmount.toLocaleString('id-ID')} berhasil diproses`);
+                const confirmResponse = await response.json();
+                confirmResult = confirmResponse;
+                if (confirmResponse.paymentStatus === 'succeeded' || confirmResponse.success) {
+                  const donationAmount = Number(amount);
+                  completeSuccessfulPayment(donationAmount, `Donasi Rp ${donationAmount.toLocaleString('id-ID')} berhasil diproses`);
+                  return;
+                }
+
+                if (confirmResponse.paymentStatus === 'processing' || confirmResponse.transactionStatus === 'pending' || confirmResponse.paymentStatus === 'pending') {
+                  setPendingDetails(confirmResponse);
+                  setPendingMessage('Pembayaran sedang diproses. Silakan cek kembali beberapa saat lagi atau lanjutkan dari Donasi Saya.');
+                  setStep('pending');
+                  return;
+                }
+
+                throw new Error(confirmResponse.error || 'Konfirmasi pembayaran gagal');
               } catch (err) {
                 console.error('Confirm failed after onSuccess', err);
-                safeSetError(err instanceof Error ? err.message : 'Konfirmasi pembayaran gagal');
+                  // If confirm failed (network/4xx/5xx), store pending payment so user can resume later
+                  try {
+                    const donationIdForCallbackNum = Number(donationIdForCallback || 0);
+                    const redirectUrlValue = String(confirmResult?.redirect_url || confirmResult?.url || '');
+                    const pendingPaymentData: PendingPaymentRecord = {
+                      donationId: donationIdForCallbackNum,
+                      orderId: String(orderIdForCallback || ''),
+                      campaignTitle,
+                      amount: Number(amount),
+                      method: paymentMethod,
+                      transactionToken: tokenToUse,
+                      redirectUrl: redirectUrlValue,
+                      ownerEmail: String(user?.email || donorEmail || '').trim() || undefined,
+                      createdAt: Date.now(),
+                      updatedAt: Date.now()
+                    } as PendingPaymentRecord;
+                    upsertPendingPayment(pendingPaymentData);
+                    if (confirmResult) {
+                      setPendingDetails(confirmResult);
+                    }
+                    setPendingMessage('Konfirmasi pembayaran gagal sementara. Pembayaran disimpan sebagai pending. Silakan lanjutkan di Donasi Saya atau periksa riwayat.');
+                    setStep('pending');
+                  } catch (saveErr) {
+                    console.error('Failed to save pending payment after confirm failure', saveErr);
+                  }
+                  safeSetError(err instanceof Error ? err.message : 'Konfirmasi pembayaran gagal');
               }
             },
             onPending: (result: Record<string, unknown>) => {
@@ -709,26 +749,63 @@ export function PaymentModal({
       const orderIdToUse = createdData?.orderId ? (createdData.orderId || '') : orderId;
       const transactionIdToUse = createdData?.transactionId ? (createdData.transactionId || '') : transactionId;
 
-      const response = await fetch(apiUrl('/api/payments/confirm'), {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${localStorage.getItem('token') || ''}`
-        },
-        body: JSON.stringify({
-          donationId: donationIdToUse,
-          orderId: orderIdToUse,
-          transactionId: transactionIdToUse
-        })
-      });
+      try {
+        const response = await fetch(apiUrl('/api/payments/confirm'), {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${localStorage.getItem('token') || ''}`
+          },
+          body: JSON.stringify({
+            donationId: donationIdToUse,
+            orderId: orderIdToUse,
+            transactionId: transactionIdToUse
+          })
+        });
 
-      if (!response.ok) {
-        const body = await response.json().catch(() => ({}));
-        throw new Error(body.error || 'Konfirmasi pembayaran gagal');
+        if (!response.ok) {
+          const body = await response.json().catch(() => ({}));
+          throw new Error(body.error || 'Konfirmasi pembayaran gagal');
+        }
+
+        const result = await response.json();
+        if (result.paymentStatus === 'succeeded' || result.success) {
+          const donationAmount = Number(amount);
+          completeSuccessfulPayment(donationAmount, `Donasi Rp ${donationAmount.toLocaleString('id-ID')} berhasil diproses (metode: ${paymentMethod})`);
+          return;
+        }
+
+        if (result.paymentStatus === 'processing' || result.transactionStatus === 'pending' || result.paymentStatus === 'pending') {
+          setPendingDetails(result);
+          setPendingMessage('Pembayaran sedang diproses. Silakan cek kembali beberapa saat lagi atau lanjutkan dari Donasi Saya.');
+          setStep('pending');
+          return;
+        }
+
+        throw new Error(result.error || 'Konfirmasi pembayaran gagal');
+      } catch (err) {
+        // Save as pending so it can be retried/resumed later
+        try {
+          const pendingPaymentData: PendingPaymentRecord = {
+            donationId: Number(donationIdToUse || 0),
+            orderId: String(orderIdToUse || ''),
+            campaignTitle,
+            amount: Number(amount),
+            method: paymentMethod,
+            transactionToken: tokenToUse || undefined,
+            redirectUrl: '',
+            ownerEmail: String(user?.email || donorEmail || '').trim() || undefined,
+            createdAt: Date.now(),
+            updatedAt: Date.now()
+          } as PendingPaymentRecord;
+          upsertPendingPayment(pendingPaymentData);
+          setPendingMessage('Konfirmasi pembayaran gagal sementara. Pembayaran disimpan sebagai pending. Silakan lanjutkan di Donasi Saya atau periksa riwayat.');
+          setStep('pending');
+        } catch (saveErr) {
+          console.error('Failed to save pending payment after confirm failure', saveErr);
+        }
+        safeSetError(mapToPaymentErrorMessage(err, 'Konfirmasi pembayaran gagal'));
       }
-
-      const donationAmount = Number(amount);
-      completeSuccessfulPayment(donationAmount, `Donasi Rp ${donationAmount.toLocaleString('id-ID')} berhasil diproses (metode: ${paymentMethod})`);
     } catch (err) {
       safeSetError(mapToPaymentErrorMessage(err, 'Pembayaran gagal'));
     } finally {

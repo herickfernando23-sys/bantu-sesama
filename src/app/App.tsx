@@ -171,35 +171,62 @@ const now = Date.now();
 
 const seededDemoDonationsByCampaignId: Record<number, Array<{ name: string; amount: number; message: string; timestamp: number }>> = {
   1: [
-    { name: 'Rafi Pratama', amount: 250000, message: 'Semoga warung Bu Siti cepat pulih.', timestamp: now - 3 * DAY_MS },
-    { name: 'Nadia Lestari', amount: 500000, message: 'Titip doa dari Bandung.', timestamp: now - 2 * DAY_MS },
-    { name: 'Komunitas Kuliner Jaktim', amount: 1000000, message: 'Dukungan untuk UMKM lokal.', timestamp: now - 1 * DAY_MS }
+    { name: 'Rafi Pratama', amount: 250000, message: 'Semoga warung Bu Siti cepat pulih.', timestamp: now - 5 * DAY_MS },
+    { name: 'Nadia Lestari', amount: 500000, message: 'Titip doa dari Bandung.', timestamp: now - 4 * DAY_MS },
+    { name: 'Komunitas Kuliner Jaktim', amount: 1000000, message: 'Dukungan untuk UMKM lokal.', timestamp: now - 3 * DAY_MS },
+    { name: 'Anton Saputra', amount: 150000, message: 'Semoga renovasinya segera selesai.', timestamp: now - 2 * DAY_MS },
+    { name: 'Dewi Prabowo', amount: 200000, message: 'Semoga dapur baru membawa rejeki.', timestamp: now - 1 * DAY_MS }
   ],
   2: [
-    { name: 'Dian Saputra', amount: 300000, message: 'Semoga para pedagang segera bangkit.', timestamp: now - 4 * DAY_MS },
-    { name: 'Salsa Maharani', amount: 450000, message: 'Bersama kita pulihkan pasar.', timestamp: now - 3 * DAY_MS },
-    { name: 'Arif Wibowo', amount: 750000, message: '', timestamp: now - 2 * DAY_MS }
+    { name: 'Dian Saputra', amount: 300000, message: 'Semoga para pedagang segera bangkit.', timestamp: now - 6 * DAY_MS },
+    { name: 'Salsa Maharani', amount: 450000, message: 'Bersama kita pulihkan pasar.', timestamp: now - 5 * DAY_MS },
+    { name: 'Arif Wibowo', amount: 750000, message: 'Dukungan untuk pemulihan ekonomi lokal.', timestamp: now - 4 * DAY_MS },
+    { name: 'Mirna Ayu', amount: 250000, message: 'Semoga kios kembali ramai.', timestamp: now - 3 * DAY_MS },
+    { name: 'Fikri Hidayat', amount: 500000, message: 'Mari bantu saudara kita di pasar.', timestamp: now - 2 * DAY_MS }
   ],
   3: [
-    { name: 'Reno Maulana', amount: 200000, message: 'Semangat terus Pak Joko.', timestamp: now - 5 * DAY_MS },
-    { name: 'Yuni Kartika', amount: 350000, message: 'Semoga jualan sate lancar lagi.', timestamp: now - 4 * DAY_MS },
-    { name: 'Bima Nugraha', amount: 500000, message: '', timestamp: now - 3 * DAY_MS }
+    { name: 'Reno Maulana', amount: 200000, message: 'Semangat terus Pak Joko.', timestamp: now - 7 * DAY_MS },
+    { name: 'Yuni Kartika', amount: 350000, message: 'Semoga jualan sate lancar lagi.', timestamp: now - 6 * DAY_MS },
+    { name: 'Bima Nugraha', amount: 500000, message: 'Dukungan untuk usaha kuliner.', timestamp: now - 5 * DAY_MS },
+    { name: 'Sinta Putri', amount: 250000, message: 'Semoga gerobaknya cepat jadi.', timestamp: now - 4 * DAY_MS },
+    { name: 'Indra Lesmana', amount: 300000, message: 'Agar usaha kembali menghidupi keluarga.', timestamp: now - 3 * DAY_MS }
   ],
   4: [
-    { name: 'Ica Permata', amount: 150000, message: 'Semoga Ibu Ani segera bisa terima order lagi.', timestamp: now - 5 * DAY_MS },
-    { name: 'Tegar Ananda', amount: 300000, message: '', timestamp: now - 4 * DAY_MS },
-    { name: 'Lina Kusuma', amount: 450000, message: 'Semoga usaha jahitnya makin maju.', timestamp: now - 3 * DAY_MS }
+    { name: 'Ica Permata', amount: 150000, message: 'Semoga Ibu Ani segera bisa terima order lagi.', timestamp: now - 7 * DAY_MS },
+    { name: 'Tegar Ananda', amount: 300000, message: 'Semoga usaha jahitnya makin maju.', timestamp: now - 6 * DAY_MS },
+    { name: 'Lina Kusuma', amount: 450000, message: 'Dukungan untuk penjahit rumahan.', timestamp: now - 5 * DAY_MS },
+    { name: 'Maya Sari', amount: 200000, message: 'Agar bisa beli kain dan benang lagi.', timestamp: now - 4 * DAY_MS },
+    { name: 'Luki Ramadhan', amount: 250000, message: 'Semoga orderan segera datang lagi.', timestamp: now - 2 * DAY_MS }
   ],
   5: [
-    { name: 'Fajar Rahman', amount: 250000, message: 'Semoga warung kopi cepat buka kembali.', timestamp: now - 4 * DAY_MS },
-    { name: 'Wulan Sari', amount: 400000, message: 'Dukungan untuk Mas Budi.', timestamp: now - 3 * DAY_MS },
-    { name: 'Yoga Firmansyah', amount: 600000, message: '', timestamp: now - 2 * DAY_MS }
+    { name: 'Fajar Rahman', amount: 250000, message: 'Semoga warung kopi cepat buka kembali.', timestamp: now - 6 * DAY_MS },
+    { name: 'Wulan Sari', amount: 400000, message: 'Dukungan untuk Mas Budi.', timestamp: now - 5 * DAY_MS },
+    { name: 'Yoga Firmansyah', amount: 600000, message: 'Semoga kedai kopi kembali ramai.', timestamp: now - 4 * DAY_MS },
+    { name: 'Bayu Pratama', amount: 300000, message: 'Bantuan kecil, harapan besar.', timestamp: now - 3 * DAY_MS },
+    { name: 'Sari Dewi', amount: 350000, message: 'Agar usaha kopi tetap bertahan.', timestamp: now - 2 * DAY_MS }
   ],
   6: [
-    { name: 'Putri Azzahra', amount: 200000, message: 'Semoga Bu Wati segera bisa jualan lagi.', timestamp: now - 4 * DAY_MS },
-    { name: 'Dimas Prakoso', amount: 350000, message: '', timestamp: now - 3 * DAY_MS },
-    { name: 'Naufal Hadi', amount: 500000, message: 'Semoga lancar rezekinya.', timestamp: now - 2 * DAY_MS }
+    { name: 'Putri Azzahra', amount: 200000, message: 'Semoga Bu Wati segera bisa jualan lagi.', timestamp: now - 6 * DAY_MS },
+    { name: 'Dimas Prakoso', amount: 350000, message: 'Dukungan untuk pelaku UMKM.', timestamp: now - 5 * DAY_MS },
+    { name: 'Naufal Hadi', amount: 500000, message: 'Semoga lancar rezekinya.', timestamp: now - 4 * DAY_MS },
+    { name: 'Rina Kartini', amount: 250000, message: 'Semoga penjualan kembali stabil.', timestamp: now - 3 * DAY_MS },
+    { name: 'Adi Santoso', amount: 300000, message: 'Agar donasi cepat sampai ke Bu Wati.', timestamp: now - 2 * DAY_MS }
   ]
+};
+
+const seededDemoDonationsByCampaignTitle: Record<string, Array<{ name: string; amount: number; message: string; timestamp: number }>> = {
+  'warung bu siti - renovasi dapur': seededDemoDonationsByCampaignId[1],
+  'modal usaha korban kebakaran pasar': seededDemoDonationsByCampaignId[2],
+  'gerobak baru untuk pak joko': seededDemoDonationsByCampaignId[3],
+  'bantuan modal toko kelontong ibu rani': seededDemoDonationsByCampaignId[4],
+  'dukungan untuk tukang jahit kecil': seededDemoDonationsByCampaignId[5],
+  'dukungan umkm lokal': seededDemoDonationsByCampaignId[6],
+  'warung makan bu siti terdampak banjir': seededDemoDonationsByCampaignId[1],
+  'pedagang pasar kebakaran butuh modal usaha': seededDemoDonationsByCampaignId[2],
+  'tukang sate pak joko kehilangan gerobak': seededDemoDonationsByCampaignId[3],
+  'penjahit rumahan ibu ani alat rusak': seededDemoDonationsByCampaignId[4],
+  'warung kopi mas budi terdampak longsor': seededDemoDonationsByCampaignId[5],
+  'pedagang sayur bu wati kehilangan motor': seededDemoDonationsByCampaignId[6]
 };
 
 const loadRegisteredUsersFromStorage = () => {
@@ -364,6 +391,20 @@ const dedupeCampaigns = (campaigns: CampaignRecord[]) => {
       return;
     }
 
+    // If the same campaign ID appears in both local and remote data, preserve the
+    // version with the higher collected/donors values, because local updates may
+    // already contain new donations that are not yet reflected in the backend.
+    if (existing.id && campaign.id && existing.id === campaign.id) {
+      const existingCollected = toSafeNumber(existing.collected, 0);
+      const nextCollected = toSafeNumber(campaign.collected, 0);
+      const existingDonors = toSafeNumber(existing.donors, 0);
+      const nextDonors = toSafeNumber(campaign.donors, 0);
+      if (nextCollected > existingCollected || nextDonors > existingDonors) {
+        byFingerprint.set(fingerprint, campaign);
+      }
+      return;
+    }
+
     const existingTarget = toSafeNumber(existing.target, 0);
     const nextTarget = toSafeNumber(campaign.target, 0);
     const existingCollected = toSafeNumber(existing.collected, 0);
@@ -405,7 +446,10 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
 
   const migratedCampaign = migrateLegacyCampaignId(campaign);
   const normalizedId = Number(migratedCampaign.id);
-  const seededDonations = seededDemoDonationsByCampaignId[normalizedId] || [];
+  const normalizedTitleKey = stripMarkdownHeading(migratedCampaign.title).toLowerCase().trim();
+  const seededDonations = seededDemoDonationsByCampaignId[normalizedId]
+    || seededDemoDonationsByCampaignTitle[normalizedTitleKey]
+    || [];
   const baseStatus = (campaign.status ?? 'pending') as CampaignStatus;
   const hasFundraisingProgress = correctedCollected > 0 || finalDonors > 0;
   const inferredStatus: CampaignStatus = baseStatus === 'rejected'
@@ -668,6 +712,64 @@ export default function App() {
     }
   };
 
+  const mergeLocalSeededCampaignUpdates = (remoteCampaigns: CampaignRecord[], localCampaigns: CampaignRecord[]) => {
+    // Map local campaigns by id for quick lookup (include all ids so we can
+    // preserve recent/local donations for the current user, not only seeded ids).
+    const localById = new Map(localCampaigns
+      .filter((campaign) => Number.isFinite(campaign.id) && campaign.id > 0)
+      .map((campaign) => [campaign.id, campaign] as const)
+    );
+
+    const now = Date.now();
+    const recentWindowMs = 2 * 60 * 1000; // 2 minutes: treat very recent local donations as authoritative for UX
+    const currentUserEmail = normalizeEmail(user?.email ?? '');
+
+    return remoteCampaigns.map((remote) => {
+      const local = localById.get(remote.id);
+      if (!local) {
+        return remote;
+      }
+
+      const remoteDonations = Array.isArray(remote.donations) ? remote.donations : [];
+      const localDonations = Array.isArray(local.donations) ? local.donations : [];
+      if (localDonations.length === 0) {
+        return remote;
+      }
+
+      // Keep local donations that either belong to the current logged-in user
+      // (ownerEmail/email matches), or are very recent (within recentWindowMs).
+      const preservedLocal = localDonations.filter((d) => {
+        try {
+          const donorEmail = normalizeEmail((d as any).email || (d as any).ownerEmail || '');
+          if (donorEmail && currentUserEmail && donorEmail === currentUserEmail) return true;
+          if (!donorEmail && (d.timestamp || 0) >= (now - recentWindowMs)) return true;
+        } catch (err) {
+          // ignore malformed donation object
+        }
+        return false;
+      });
+
+      // Merge remote donations with preserved local donations, dedupe by key
+      const combined = [...remoteDonations, ...preservedLocal];
+      const seen = new Set<string>();
+      const mergedDonations = combined.filter((donation) => {
+        const key = `${String(donation.name || '').trim().toLowerCase()}|${donation.amount}|${String(donation.message || '').trim().toLowerCase()}|${Math.floor((donation.timestamp || 0) / 1000)}`;
+        if (seen.has(key)) {
+          return false;
+        }
+        seen.add(key);
+        return true;
+      }).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+      return {
+        ...remote,
+        collected: Math.max(remote.collected, local.collected),
+        donors: Math.max(remote.donors, local.donors, mergedDonations.length),
+        donations: mergedDonations
+      };
+    });
+  };
+
   function loadHiddenRejectedCampaignIdsFromStorage() {
     if (typeof window === 'undefined') {
       return [] as number[];
@@ -696,7 +798,8 @@ export default function App() {
 
   const syncCampaignsFromServer = async (
     cancelledRef?: { current: boolean },
-    extraHiddenDemoCampaignIds: number[] = []
+    extraHiddenDemoCampaignIds: number[] = [],
+    localCampaignsOverride?: CampaignRecord[]
   ): Promise<boolean> => {
     const now = Date.now();
     if (syncCampaignsInFlightRef.current || (now - lastCampaignSyncAtRef.current) < 5000) {
@@ -724,9 +827,12 @@ export default function App() {
         && campaign.status !== 'rejected'
       ));
 
+      const localCampaignsToMerge = localCampaignsOverride ?? campaigns;
+      remoteCampaigns = mergeLocalSeededCampaignUpdates(remoteCampaigns, localCampaignsToMerge);
+
       // Preserve the original seeded campaigns (IDs 1..6) from local state so
       // they don't disappear when backend currently returns only newly added rows.
-      const preservedSeedCampaigns = campaigns.filter((campaign) => (
+      const preservedSeedCampaigns = localCampaignsToMerge.filter((campaign) => (
         campaign.id >= 1
         && campaign.id <= 6
         && campaign.status !== 'rejected'
@@ -998,6 +1104,7 @@ export default function App() {
       daysLeft: 25,
       category: 'UMKM Terdampak Bencana',
       organizer: 'Karang Taruna Jakarta Timur',
+      donations: seededDemoDonationsByCampaignId[1],
       story: `Bu Siti (52 tahun) adalah pemilik warung makan sederhana di Kampung Melayu, Jakarta Timur yang sudah berdiri sejak 15 tahun lalu. Warung ini menjadi satu-satunya sumber penghasilan untuk menghidupi keluarganya, termasuk dua anaknya yang masih bersekolah.
 
 Pada tanggal 15 Maret 2026, banjir besar melanda kawasan tersebut dengan ketinggian air mencapai 1,5 meter. Warung Bu Siti terendam selama 3 hari, mengakibatkan:
@@ -1042,6 +1149,7 @@ Mari kita bantu Bu Siti untuk bangkit kembali dan melanjutkan usahanya! 🙏`,
       daysLeft: 18,
       category: 'UMKM Terdampak Bencana',
       organizer: 'Paguyuban Pedagang Pasar Minggu',
+      donations: seededDemoDonationsByCampaignId[2],
       story: `Pada dini hari tanggal 5 April 2026, kebakaran hebat melanda Pasar Minggu, Jakarta Selatan. Api yang berasal dari korsleting listrik dengan cepat melalap 45 kios pedagang yang mayoritas berjualan bahan makanan, pakaian, dan kebutuhan sehari-hari.
 
 Kerugian yang dialami:
@@ -1083,6 +1191,7 @@ Dengan bantuan Anda, para pedagang dapat bangkit dan melanjutkan usaha mereka. S
       daysLeft: 12,
       category: 'UMKM Terdampak Bencana',
       organizer: 'Komunitas Pedagang Kaki Lima Bandung',
+      donations: seededDemoDonationsByCampaignId[3],
       story: `Pak Joko (45 tahun) adalah pedagang sate keliling yang sudah berjualan selama 20 tahun di kawasan Dago, Bandung. Sate Pak Joko terkenal enak dan selalu ramai pembeli setiap malam.
 
 Pada tanggal 20 Maret 2026, ketika Pak Joko sedang istirahat sebentar untuk sholat, gerobak satenya dicuri orang yang tidak bertanggung jawab. Gerobak tersebut berisi:
@@ -1128,6 +1237,7 @@ Mari kita bantu Pak Joko untuk bisa berjualan lagi! 🍢`,
       daysLeft: 20,
       category: 'UMKM Terdampak Bencana',
       organizer: 'Yayasan UMKM Surabaya',
+      donations: seededDemoDonationsByCampaignId[4],
       story: `Ibu Ani (38 tahun) adalah penjahit rumahan di Surabaya yang sudah menekuni profesi ini selama 12 tahun. Dari hasil jahit-menjahit, Ibu Ani bisa menghidupi kedua anaknya yang masih sekolah.
 
 Orderan jahitan Ibu Ani selalu ramai, mulai dari jahit baju, pembuatan seragam, hingga reparasi pakaian. Rata-rata penghasilan Ibu Ani mencapai Rp 3-4 juta per bulan.
@@ -1170,6 +1280,7 @@ Dengan bantuan Anda, Ibu Ani bisa kembali produktif dan menghidupi keluarganya! 
       daysLeft: 30,
       category: 'UMKM Terdampak Bencana',
       organizer: 'Dinas Koperasi & UMKM Bogor',
+      donations: seededDemoDonationsByCampaignId[5],
       story: `Warung Kopi "Ngopi Gunung" milik Mas Budi (42 tahun) berlokasi di kawasan wisata Puncak, Bogor. Warung ini sudah berdiri 8 tahun dan menjadi tempat favorit wisatawan untuk menikmati kopi sambil melihat pemandangan gunung.
 
 Pada tanggal 10 April 2026, hujan deras yang terjadi selama 3 hari menyebabkan tanah longsor di sekitar warung. Akibatnya:
@@ -1213,6 +1324,7 @@ Bantu Mas Budi untuk membuka kembali warung kopinya! ☕`,
       daysLeft: 15,
       category: 'UMKM Terdampak Bencana',
       organizer: 'Forum UMKM Yogyakarta',
+      donations: seededDemoDonationsByCampaignId[6],
       story: `Bu Wati (48 tahun) adalah pedagang sayur keliling di Yogyakarta. Setiap pagi jam 4, Bu Wati berangkat ke pasar induk untuk membeli sayuran segar, kemudian menjualnya keliling kampung menggunakan motor bebek yang sudah dimodifikasi dengan bak besar.
 
 Pada tanggal 2 April 2026, motor Bu Wati hilang dicuri saat diparkir di pasar. Motor tersebut sudah dilengkapi dengan:
@@ -1270,7 +1382,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
         setCampaignsHydrated(true);
       }
 
-      const synced = await syncCampaignsFromServer({ current: cancelled });
+      const synced = await syncCampaignsFromServer({ current: cancelled }, [], localCampaigns || undefined);
       if (!cancelled && !synced && localCampaigns !== null && localCampaigns.length > 0) {
         setCampaigns(localCampaigns);
       }
@@ -2129,26 +2241,40 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           onDonationSuccess={(amount, donorInfo) => {
             selectedCampaignSnapshotRef.current = null;
             setSelectedCampaignSource('id');
-            setCampaigns((prev) => prev.map((campaign) => (
-              campaign.id === selectedCampaignData.id
-                ? {
-                    ...campaign,
-                    collected: campaign.collected + amount,
-                    donors: campaign.donors + 1,
-                    donations: [
-                      ...(campaign.donations || []),
-                      {
-                        name: donorInfo.name,
-                        amount: amount,
-                        tip: donorInfo.tip || 0,
-                        message: donorInfo.message,
-                        timestamp: Date.now()
-                      }
-                    ]
-                  }
-                : campaign
-            )));
-            void syncCampaignsFromServer();
+            setCampaigns((prev) => {
+              const nextCampaigns = prev.map((campaign) => (
+                campaign.id === selectedCampaignData.id
+                  ? {
+                      ...campaign,
+                      collected: campaign.collected + amount,
+                      donors: campaign.donors + 1,
+                      donations: [
+                        ...(campaign.donations || []),
+                        {
+                          name: donorInfo.name,
+                          amount: amount,
+                          // include owner/email so DonasiSaya can identify user's donations
+                          ownerEmail: user?.email || undefined,
+                          email: user?.email || undefined,
+                          tip: donorInfo.tip || 0,
+                          message: donorInfo.message,
+                          timestamp: Date.now()
+                        }
+                      ]
+                    }
+                  : campaign
+              ));
+
+              try {
+                window.localStorage.setItem(campaignStorageKey, JSON.stringify(nextCampaigns));
+                window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
+              } catch {
+                // ignore localStorage write failures
+              }
+
+              void syncCampaignsFromServer(undefined, [], nextCampaigns);
+              return nextCampaigns;
+            });
           }}
           onNavigateToContinuePayment={openPendingPayment}
         />

@@ -216,12 +216,17 @@ router.post('/confirm', optionalAuth, async (req, res) => {
     if (isDemoPaymentMode) {
       // Demo mode: mark as succeeded
       donation.paymentStatus = 'succeeded';
+      donation.processedAt = new Date();
       await donation.save();
+
+      console.info(`[Payments] Demo confirm saved donation ${donation.id} status=${donation.paymentStatus} amount=${donation.amount}`);
 
       // Update campaign collected amount
       const campaign = await Campaign.findByPk(donation.campaignId);
-      campaign.collected = (campaign.collected || 0) + Number(donation.amount);
+      campaign.collected = Number(campaign.collected || 0) + Number(donation.amount);
       await campaign.save();
+
+      console.info(`[Payments] Demo confirm updated campaign ${campaign.id} collected=${campaign.collected}`);
 
       return res.json({
         success: true,
@@ -239,11 +244,13 @@ router.post('/confirm', optionalAuth, async (req, res) => {
         // Update donation status berdasarkan Midtrans response
         if (transaction.transaction_status === 'settlement' || transaction.transaction_status === 'capture') {
           donation.paymentStatus = 'succeeded';
-          
+          donation.processedAt = new Date();
+
           // Update campaign collected amount
           const campaign = await Campaign.findByPk(donation.campaignId);
-          campaign.collected = (campaign.collected || 0) + Number(donation.amount);
+          campaign.collected = Number(campaign.collected || 0) + Number(donation.amount);
           await campaign.save();
+          console.info(`[Payments] Confirm updated campaign ${campaign.id} collected=${campaign.collected}`);
         } else if (transaction.transaction_status === 'pending') {
           donation.paymentStatus = 'processing';
         } else if (transaction.transaction_status === 'deny' || transaction.transaction_status === 'failed') {
@@ -251,6 +258,7 @@ router.post('/confirm', optionalAuth, async (req, res) => {
         }
 
         await donation.save();
+        console.info(`[Payments] Confirm saved donation ${donation.id} status=${donation.paymentStatus} amount=${donation.amount}`);
 
         return res.json({
           success: donation.paymentStatus === 'succeeded',
@@ -353,8 +361,12 @@ router.post('/webhook', async (req, res) => {
 
       // Update campaign collected amount
       const campaign = await Campaign.findByPk(donation.campaignId);
-      campaign.collected = (campaign.collected || 0) + Number(donation.amount);
+      campaign.collected = Number(campaign.collected || 0) + Number(donation.amount);
       await campaign.save();
+
+      donation.processedAt = new Date();
+      await donation.save();
+      console.info(`[Payments] Webhook updated donation ${donation.id} status=${donation.paymentStatus} and campaign ${campaign.id} collected=${campaign.collected}`);
 
     } else if (transactionStatus === 'pending') {
       donation.paymentStatus = 'processing';
@@ -362,6 +374,9 @@ router.post('/webhook', async (req, res) => {
       donation.paymentStatus = 'failed';
     }
 
+    if (!donation.processedAt) {
+      donation.processedAt = new Date();
+    }
     await donation.save();
 
     console.log(`Webhook: Payment ${orderId} status updated to ${transactionStatus}`);

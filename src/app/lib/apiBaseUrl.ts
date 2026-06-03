@@ -3,17 +3,32 @@ export function getApiBaseUrl() {
   if (envBaseUrl.endsWith('/api')) {
     envBaseUrl = envBaseUrl.slice(0, -4);
   }
-  if (envBaseUrl) return envBaseUrl;
 
-  // Local dev fallback: when frontend is opened on localhost without VITE_API_URL,
-  // call backend directly on port 4000 so API requests still work even without Vite proxy.
   if (typeof window !== 'undefined') {
     const host = String(window.location.hostname || '').toLowerCase();
-    if (host === 'localhost' || host === '127.0.0.1') {
+    const isLocalhostHost = host === 'localhost' || host === '127.0.0.1';
+
+    if (isLocalhostHost && envBaseUrl) {
+      const envHost = (() => {
+        try {
+          return new URL(envBaseUrl).hostname.toLowerCase();
+        } catch {
+          return '';
+        }
+      })();
+
+      if (envHost && envHost !== 'localhost' && envHost !== '127.0.0.1') {
+        console.warn('VITE_API_URL points to a remote host while frontend is running on localhost. Using local backend http://localhost:4000 for development.');
+        envBaseUrl = '';
+      }
+    }
+
+    if (!envBaseUrl && isLocalhostHost) {
       return 'http://localhost:4000';
     }
   }
 
+  if (envBaseUrl) return envBaseUrl;
   return '';
 }
 

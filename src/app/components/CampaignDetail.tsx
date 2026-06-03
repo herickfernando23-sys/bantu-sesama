@@ -176,12 +176,31 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   const [withdrawError, setWithdrawError] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-  const filledTarget = campaign.target > 0 ? campaign.target : (campaign.goal ?? 5000000);
-  const filledCollected = Math.max(0, campaign.collected || 0);
-  const filledDonors = Math.max(0, campaign.donors || 0);
-
   const [fetchedDonations, setFetchedDonations] = useState<Array<{name: string; amount: number; message: string; timestamp: number}> | null>(null);
   const [loadingDonations, setLoadingDonations] = useState(false);
+
+  const filledTarget = campaign.target > 0 ? campaign.target : (campaign.goal ?? 5000000);
+
+  const donationSourceList = [
+    ...(Array.isArray(campaign.donations) ? campaign.donations : []),
+    ...(Array.isArray(fetchedDonations) ? fetchedDonations : [])
+  ];
+
+  const uniqueDonationKeys = new Set<string>();
+  const dedupedDonations = donationSourceList.filter((donation) => {
+    const key = `${String(donation.name).trim().toLowerCase()}|${donation.amount}|${String(donation.message || '').trim().toLowerCase()}|${Math.floor((donation.timestamp || 0) / (60 * 60 * 1000))}`;
+    if (uniqueDonationKeys.has(key)) {
+      return false;
+    }
+    uniqueDonationKeys.add(key);
+    return true;
+  });
+
+  const computedCollected = dedupedDonations.reduce((sum, donation) => sum + Number(donation.amount || 0), 0);
+  const computedDonors = dedupedDonations.length;
+
+  const filledCollected = Math.max(0, Math.max(campaign.collected || 0, computedCollected));
+  const filledDonors = Math.max(0, Math.max(campaign.donors || 0, computedDonors));
 
   const percentage = filledTarget > 0 ? Math.min((filledCollected / filledTarget) * 100, 100) : 0;
   const canEdit = user?.email && campaign.creatorEmail && user.email.toLowerCase() === campaign.creatorEmail.toLowerCase();
@@ -317,49 +336,53 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
     }
   }, [user?.email, campaign.id]);
 
-  // Fetch donations if not available but campaign has donors
+  // Fetch donations once for campaigns that have donor activity.
+  // Seeded campaigns (1..6) may already include local demo donations,
+  // so we must still fetch backend donations to avoid hiding actual new donations.
   useEffect(() => {
-    if (!campaign.donations || campaign.donations.length === 0) {
-      if (campaign.donors > 0) {
-        setLoadingDonations(true);
-        (async () => {
-          try {
-            const res = await fetch(apiUrl(`/api/donations?campaignId=${campaign.id}`));
-            if (!res.ok) {
-              const text = await res.text().catch(() => '');
-              console.error('Failed to fetch donations: non-OK response', res.status, text);
-              setFetchedDonations([]);
-              return;
-            }
-
-            const contentType = res.headers.get('content-type') || '';
-            if (!contentType.includes('application/json')) {
-              const text = await res.text().catch(() => '');
-              console.error('Failed to fetch donations: expected JSON but got:', contentType, text.substring(0, 200));
-              setFetchedDonations([]);
-              return;
-            }
-
-            const data = await res.json().catch((err) => {
-              console.error('Failed to parse donations JSON:', err);
-              return null;
-            });
-
-            if (Array.isArray(data) && data.length > 0) {
-              setFetchedDonations(data);
-            } else {
-              setFetchedDonations([]);
-            }
-          } catch (err) {
-            console.error('Failed to fetch donations:', err);
-            setFetchedDonations([]);
-          } finally {
-            setLoadingDonations(false);
-          }
-        })();
-      }
+    if (fetchedDonations !== null) {
+      return;
     }
-  }, [campaign.id, campaign.donors, campaign.donations]);
+
+    if (campaign.donors > 0) {
+      setLoadingDonations(true);
+      (async () => {
+        try {
+          const res = await fetch(apiUrl(`/api/donations?campaignId=${campaign.id}`));
+          if (!res.ok) {
+            const text = await res.text().catch(() => '');
+            console.error('Failed to fetch donations: non-OK response', res.status, text);
+            setFetchedDonations([]);
+            return;
+          }
+
+          const contentType = res.headers.get('content-type') || '';
+          if (!contentType.includes('application/json')) {
+            const text = await res.text().catch(() => '');
+            console.error('Failed to fetch donations: expected JSON but got:', contentType, text.substring(0, 200));
+            setFetchedDonations([]);
+            return;
+          }
+
+          const data = await res.json().catch((err) => {
+            console.error('Failed to parse donations JSON:', err);
+            return null;
+          });
+
+          if (Array.isArray(data) && data.length > 0) {
+            setFetchedDonations(data);
+          } else {
+            setFetchedDonations([]);
+          }
+        } catch (err) {
+          console.error('Failed to fetch donations:', err);
+          setFetchedDonations([]);
+        } finally {
+          setLoadingDonations(false);
+        }
+      })();
+    }
+  }, [campaign.id, campaign.donors, fetchedDonations]);
 
   const handleEditImageUpload = (file: File | null) => {
     if (!file) {
@@ -1083,18 +1106,9 @@ export function shareCampaign(campaign: Campaign) {
     }
   }
 
-  // Fallback: show share options
-  const shareOptions = {
-    whatsapp: `https://wa.me/?text=${text}%20${encodedUrl}`,
-    facebook: `https://www.facebook.com/sharer/sharer.php?u=${encodedUrl}&quote=${encodedTitle}`,
-    twitter: `https://twitter.com/intent/tweet?text=${text}&url=${encodedUrl}`,
-    telegram: `https://t.me/share/url?url=${encodedUrl}&text=${text}`,
-    email: `mailto:?subject=${encodedTitle}&body=Bantulah kampanye ${encodedTitle} di BantuSesama: ${url}`
-  };
-
   // Copy to clipboard as default
   navigator.clipboard.writeText(url).then(() => {
-    alert('Link kampanye telah disalin. Bagikan ke teman-teman Anda!\n\nAtau gunakan:\n✓ WhatsApp\n✓ Facebook\n✓ Twitter\n✓ Telegram\n✓ Email');
+    alert('Link kampanye telah disalin. Bagikan ke teman-teman Anda!\n\nAtau gunakan:\n✓ WhatsApp\n✓ Facebook\n✓ Twitter\n✓ Telegram');
   });
 }
 
@@ -1132,13 +1146,6 @@ export function getShareOptions(campaign: Campaign) {
       url: `https://t.me/share/url?url=${encodedUrl}&text=${text}`,
       bg: 'hover:bg-blue-50',
       iconBg: 'bg-blue-100'
-    },
-    {
-      name: 'Email',
-      icon: <Mail className="w-5 h-5 text-rose-500" />,
-      url: `mailto:?subject=${encodedTitle}&body=Bantulah kampanye "${campaign.title}" di BantuSesama: ${url}`,
-      bg: 'hover:bg-rose-50',
-      iconBg: 'bg-rose-100'
     },
     {
       name: 'Salin Link',

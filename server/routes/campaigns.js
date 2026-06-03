@@ -53,7 +53,7 @@ router.get('/', async (req, res) => {
         User,
         {
           model: Donation,
-          attributes: ['id', 'amount', 'message', 'createdAt', 'donorName', 'isAnonymous'],
+          attributes: ['id', 'amount', 'message', 'createdAt', 'donorName', 'donorEmail', 'isAnonymous'],
           where: { paymentStatus: 'succeeded' },
           required: false
         }
@@ -73,7 +73,8 @@ router.get('/', async (req, res) => {
             name: donation.isAnonymous ? 'Anonymous' : donation.donorName || 'Donatur',
             amount: Number(donation.amount || 0),
             message: donation.message || '',
-            timestamp: donation.createdAt ? new Date(donation.createdAt).getTime() : Date.now()
+            timestamp: donation.createdAt ? new Date(donation.createdAt).getTime() : Date.now(),
+            email: donation.donorEmail || undefined
           }))
         };
       });
@@ -82,6 +83,51 @@ router.get('/', async (req, res) => {
   } catch (err) {
     console.error('Error fetching campaigns:', err);
     res.status(500).json({ error: 'Failed to fetch campaigns' });
+  }
+});
+
+// Get single campaign by id (including succeeded donations)
+router.get('/:id', async (req, res) => {
+  try {
+    const campaignId = Number(req.params.id);
+    if (!Number.isFinite(campaignId) || campaignId <= 0) {
+      return res.status(400).json({ error: 'campaign id tidak valid' });
+    }
+
+    const campaign = await Campaign.findByPk(campaignId, {
+      include: [
+        Category,
+        User,
+        {
+          model: Donation,
+          attributes: ['id', 'amount', 'message', 'createdAt', 'donorName', 'donorEmail', 'isAnonymous'],
+          where: { paymentStatus: 'succeeded' },
+          required: false
+        }
+      ]
+    });
+
+    if (!campaign) return res.status(404).json({ error: 'campaign not found' });
+
+    const plainCampaign = campaign.toJSON();
+    const succeededDonations = Array.isArray(plainCampaign.Donations) ? plainCampaign.Donations : [];
+
+    const response = {
+      ...plainCampaign,
+      donors: succeededDonations.length,
+      donations: succeededDonations.map((donation) => ({
+        name: donation.isAnonymous ? 'Anonymous' : donation.donorName || 'Donatur',
+        amount: Number(donation.amount || 0),
+        message: donation.message || '',
+        timestamp: donation.createdAt ? new Date(donation.createdAt).getTime() : Date.now(),
+        email: donation.donorEmail || undefined
+      }))
+    };
+
+    res.json(response);
+  } catch (err) {
+    console.error('Error fetching campaign by id:', err);
+    res.status(500).json({ error: 'Failed to fetch campaign' });
   }
 });
 

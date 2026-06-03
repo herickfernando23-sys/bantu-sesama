@@ -140,6 +140,28 @@ async function main() {
           { name: 'Putri Azzahra', email: 'putri.azzahra@example.test', amount: 200000, message: 'Semoga tukang jahit bisa kembali buka.' },
           { name: 'Dimas Prakoso', email: 'dimas.prakoso@example.test', amount: 350000, message: 'Dukungan untuk pelaku UMKM.' }
         ]
+      },
+      {
+        title: 'Dukungan UMKM Lokal',
+        description: 'Dukungan cepat untuk pelaku UMKM yang sedang mengembangkan usaha.',
+        fullDescription: 'Program dukungan ini membantu pelaku UMKM kecil mendapatkan tambahan modal dan bahan baku agar usaha tetap berjalan.',
+        goal: 8000000,
+        collected: 3400000,
+        location: 'Semarang',
+        category: 'UMKM Lokal',
+        organizer: 'Gerakan Peduli UMKM',
+        image: 'https://images.unsplash.com/photo-1536518898404-2d4e02692321?q=80&w=1080',
+        status: 'verified',
+        daysLeft: 28,
+        disbursementHistory: [
+          { date: '7 Apr', amount: 1200000, purpose: 'Pembelian bahan baku dan kemasan' },
+          { date: '16 Apr', amount: 2200000, purpose: 'Sewa tempat sementara dan pemasaran' }
+        ],
+        seededDonations: [
+          { name: 'Aulia Ramadhan', email: 'aulia.ramadhan@example.test', amount: 300000, message: 'Mari bantu usaha mikro bertahan.', },
+          { name: 'Eko Prabowo', email: 'eko.prabowo@example.test', amount: 450000, message: 'Dukungan untuk pelaku usaha lokal.', },
+          { name: 'Sinta Putri', email: 'sinta.putri@example.test', amount: 550000, message: 'Semoga UMKM terus berkembang.', }
+        ]
       }
     ];
 
