@@ -1499,9 +1499,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       
       if (!cancelled && !shouldPrioritizeServerForAdmin && localCampaigns !== null && localCampaigns.length > 0) {
         // Ensure seeded campaigns (1-6) are always preserved when hydrating from storage
-        const currentSeeded = campaigns.filter((c) => c.id >= 1 && c.id <= 6);
+        const defaultSeededCampaigns = defaultSeededCampaignsRef.current;
         const storedSeededIds = new Set(localCampaigns.filter((c) => c.id >= 1 && c.id <= 6).map((c) => c.id));
-        const missingSeeded = currentSeeded.filter((c) => !storedSeededIds.has(c.id));
+        const missingSeeded = defaultSeededCampaigns.filter((c) => !storedSeededIds.has(c.id));
         
         hydrationCampaigns = dedupeCampaigns([...localCampaigns, ...missingSeeded]);
         setCampaigns(hydrationCampaigns);
@@ -1516,9 +1516,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       const synced = await syncCampaignsFromServer({ current: cancelled }, [], hydrationCampaigns, true);
       if (!cancelled && !synced && localCampaigns !== null && localCampaigns.length > 0) {
         // Ensure seeded campaigns are preserved even if sync fails
-        const currentSeeded = campaigns.filter((c) => c.id >= 1 && c.id <= 6);
+        const defaultSeededCampaigns = defaultSeededCampaignsRef.current;
         const localSeededIds = new Set(localCampaigns.filter((c) => c.id >= 1 && c.id <= 6).map((c) => c.id));
-        const missingSeeded = currentSeeded.filter((c) => !localSeededIds.has(c.id));
+        const missingSeeded = defaultSeededCampaigns.filter((c) => !localSeededIds.has(c.id));
         
         const fallbackCampaigns = dedupeCampaigns([...localCampaigns, ...missingSeeded]);
         setCampaigns(fallbackCampaigns);
