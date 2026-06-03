@@ -987,6 +987,8 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
                           if (option.isCopy) {
                             navigator.clipboard.writeText(option.url);
                             alert('Link disalin!');
+                          } else if (option.url.startsWith('mailto:')) {
+                            window.location.href = option.url;
                           } else {
                             window.open(option.url, '_blank', 'width=600,height=400');
                           }

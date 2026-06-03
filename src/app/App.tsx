@@ -1589,6 +1589,15 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
   const recurringDonationStatus = getRecurringDonationForEmail(user?.email);
 
+  const doesDonationBelongToUser = (donation: any, email?: string | null) => {
+    if (!email) {
+      return false;
+    }
+
+    const ownerEmail = donation?.ownerEmail || donation?.email;
+    return typeof ownerEmail === 'string' && normalizeEmail(ownerEmail) === normalizeEmail(email);
+  };
+
   const campaignsSortedByTime = [...campaigns].sort((a, b) => (b.createdAt ?? b.id) - (a.createdAt ?? a.id));
   const mockCampaigns = campaignsSortedByTime.filter((campaign) => campaign.id >= 1000);
   const realCampaigns = campaignsSortedByTime.filter((campaign) => campaign.id < 1000);
@@ -1600,42 +1609,61 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       && !legacyPaginationMockTitles.has(toSafeText(campaign.title))
     ));
 
-  const donationHistoryForDisplay = campaignsForDisplay.flatMap((campaign) => {
-    if (campaign.donations && campaign.donations.length > 0) {
-      return [...campaign.donations]
-        .reverse()
-        .map((donation, index) => ({
-          id: campaign.id * 1000 + index,
-          campaignTitle: campaign.title,
-          amount: donation.amount,
-          date: new Date(donation.timestamp).toLocaleDateString('id-ID', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric'
-          }),
-          status: 'Sukses' as const,
-          campaignId: campaign.id,
-          timestamp: donation.timestamp
-        }));
-    }
+  const userDonationHistoryForDisplay = user
+    ? campaignsForDisplay.flatMap((campaign) => {
+        if (campaign.donations && campaign.donations.length > 0) {
+          return [...campaign.donations]
+            .reverse()
+            .filter((donation) => doesDonationBelongToUser(donation, user.email))
+            .map((donation, index) => ({
+              id: campaign.id * 1000 + index,
+              campaignTitle: campaign.title,
+              amount: donation.amount,
+              date: new Date(donation.timestamp).toLocaleDateString('id-ID', {
+                day: 'numeric',
+                month: 'short',
+                year: 'numeric'
+              }),
+              status: 'Sukses' as const,
+              campaignId: campaign.id,
+              timestamp: donation.timestamp
+            }));
+        }
 
-    if (campaign.donors > 0) {
-      return [{
-        id: campaign.id,
-        campaignTitle: campaign.title,
-        amount: campaign.collected,
-        date: new Date(campaign.createdAt ?? Date.now()).toLocaleDateString('id-ID', {
-          day: 'numeric',
-          month: 'short',
-          year: 'numeric'
-        }),
-        status: 'Sukses' as const,
-        campaignId: campaign.id
-      }];
-    }
+        if (campaign.donors > 0) {
+          return [{
+            id: campaign.id,
+            campaignTitle: campaign.title,
+            amount: campaign.collected,
+            date: new Date(campaign.createdAt ?? Date.now()).toLocaleDateString('id-ID', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric'
+            }),
+            status: 'Sukses' as const,
+            campaignId: campaign.id
+          }];
+        }
 
-    return [];
-  });
+        return [];
+      })
+    : [];
+
+  const pendingDonationsForDisplay = visiblePendingPayments.map((payment, index) => ({
+    id: 1000000 + index,
+    campaignTitle: payment.campaignTitle,
+    amount: payment.amount,
+    date: new Date(payment.createdAt).toLocaleDateString('id-ID', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    }),
+    status: 'Dalam Proses' as const,
+    campaignId: 0,
+    timestamp: payment.createdAt
+  }));
+
+  const donationHistoryForDisplay = [...pendingDonationsForDisplay, ...userDonationHistoryForDisplay];
 
   // Ensure global sort: newest donations first
   donationHistoryForDisplay.sort((a, b) => {
