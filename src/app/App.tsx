@@ -1462,7 +1462,6 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       ]
     }
     ];
-  });
 
   const [campaigns, setCampaigns] = useState<CampaignRecord[]>(() => {
     try {
