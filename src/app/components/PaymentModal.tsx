@@ -7,6 +7,19 @@ const midtransClientKey = String(((import.meta as any).env && (import.meta as an
 const viteMidtransIsProduction = String(((import.meta as any).env && (import.meta as any).env.VITE_MIDTRANS_IS_PRODUCTION) || '').toLowerCase() === 'true';
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
+const isMidtransClientKeyAvailable = midtransClientKey.length > 0;
+const isMidtransSandboxKey = midtransClientKey.startsWith('SB-Mid-client-');
+const isMidtransProductionKey = midtransClientKey.startsWith('Mid-client-') && !midtransClientKey.startsWith('SB-');
+const midtransClientKeyMismatch = isMidtransClientKeyAvailable && (
+  (viteMidtransIsProduction && isMidtransSandboxKey) ||
+  (!viteMidtransIsProduction && isMidtransProductionKey)
+);
+const midtransSetupError = !isMidtransClientKeyAvailable
+  ? 'VITE_MIDTRANS_CLIENT_KEY belum dikonfigurasi. Tambahkan kunci Midtrans client ke environment dan rebuild aplikasi.'
+  : midtransClientKeyMismatch
+    ? `VITE_MIDTRANS_CLIENT_KEY / VITE_MIDTRANS_IS_PRODUCTION tidak cocok. Saat ini VITE_MIDTRANS_IS_PRODUCTION=${viteMidtransIsProduction} tetapi key prefix=${midtransClientKey.slice(0, 12)}.`
+    : '';
+
 const mapToPaymentErrorMessage = (err: unknown, fallbackMessage: string) => {
   const rawMessage = err instanceof Error ? String(err.message || '') : String(err || '');
   const normalized = rawMessage.trim().toLowerCase();
@@ -54,6 +67,11 @@ const preloadMidtransSnap = () => {
   const existing = document.querySelector('script[data-midtrans-snap="true"]');
   if (existing) {
     console.log('[Midtrans] Snap script tag already exists');
+    return;
+  }
+
+  if (midtransSetupError) {
+    console.error('[Midtrans] Invalid client key setup:', midtransSetupError);
     return;
   }
 
@@ -587,8 +605,8 @@ export function PaymentModal({
       const demoFlag = Boolean(createdData?.demoMode);
 
       if (!demoFlag) {
-        if (!midtransClientKey) {
-          throw new Error('VITE_MIDTRANS_CLIENT_KEY belum diisi di .env');
+        if (midtransSetupError) {
+          throw new Error(midtransSetupError);
         }
 
         if (!isSnapReady || !window.snap) {
@@ -826,6 +844,11 @@ export function PaymentModal({
         </div>
 
         <div className="p-6">
+          {midtransSetupError && (
+            <div className="mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg text-yellow-900 text-sm">
+              <strong>Perhatian:</strong> {midtransSetupError}
+            </div>
+          )}
           {step === 'identity' && (
             <>
               <div className="mb-6 space-y-4">
