@@ -858,6 +858,15 @@ export default function App() {
       const localCampaignsToMerge = localCampaignsOverride ?? campaigns;
       remoteCampaigns = mergeLocalSeededCampaignUpdates(remoteCampaigns, localCampaignsToMerge);
 
+      // Preserve seeded demo campaigns from local state whenever possible.
+      // This prevents a successful server sync from temporarily removing local-only seeded campaigns.
+      const localSeededCampaigns = (localCampaignsOverride ?? campaigns)
+        .filter((campaign) => Number.isFinite(campaign.id) && campaign.id >= 1 && campaign.id <= 6)
+        .filter((campaign) => !hiddenDemoIds.has(campaign.id));
+      if (localSeededCampaigns.length > 0) {
+        remoteCampaigns = dedupeCampaigns([...remoteCampaigns, ...localSeededCampaigns]);
+      }
+
       // Always restore seeded campaigns (1..6) - they are core to the platform and should never disappear
       // even if backend sync returns no campaigns or incomplete data
       const remoteSeededIds = new Set(remoteCampaigns
