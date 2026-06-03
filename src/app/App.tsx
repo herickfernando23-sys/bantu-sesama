@@ -1197,17 +1197,7 @@ export default function App() {
     );
   };
 
-  const [campaigns, setCampaigns] = useState<CampaignRecord[]>(() => {
-    try {
-      const stored = loadCampaignsFromStorage();
-      if (stored && Array.isArray(stored) && stored.length > 0) {
-        return stored;
-      }
-    } catch {
-      // fall back to seeded defaults below
-    }
-
-    return [
+  const getDefaultSeededCampaigns = (): CampaignRecord[] => [
     {
       id: 1,
       createdAt: 1711238400000,
@@ -1473,7 +1463,20 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     }
     ];
   });
-  const defaultSeededCampaignsRef = useRef<CampaignRecord[]>(campaigns.filter((campaign) => campaign.id >= 1 && campaign.id <= 6));
+
+  const [campaigns, setCampaigns] = useState<CampaignRecord[]>(() => {
+    try {
+      const stored = loadCampaignsFromStorage();
+      if (stored && Array.isArray(stored) && stored.length > 0) {
+        return stored;
+      }
+    } catch {
+      // fall back to seeded defaults below
+    }
+
+    return getDefaultSeededCampaigns();
+  });
+  const defaultSeededCampaignsRef = useRef<CampaignRecord[]>(getDefaultSeededCampaigns());
 
   useEffect(() => {
     let cancelled = false;
