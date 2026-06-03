@@ -13,6 +13,7 @@ interface CampaignCardProps {
   donors: number;
   daysLeft: number;
   category: string;
+  donations?: Array<{ name: string; amount: number; message?: string; timestamp?: number }>;
   onClick: () => void;
 }
 
@@ -28,12 +29,25 @@ export function CampaignCard({
   donors,
   daysLeft,
   category,
+  donations,
   onClick
 }: CampaignCardProps) {
   const effectiveTarget = target > 0 ? target : (goal ?? 0);
   const filledTarget = effectiveTarget > 0 ? effectiveTarget : 5000000;
-  const filledCollected = Math.max(0, collected || 0);
-  const filledDonors = Math.max(0, donors || 0);
+  const donationList = Array.isArray(donations) ? donations : [];
+  const seenDonationKeys = new Set<string>();
+  const dedupedDonations = donationList.filter((donation) => {
+    const key = `${String(donation.name || '').trim().toLowerCase()}|${donation.amount}|${String(donation.message || '').trim().toLowerCase()}|${Math.floor((donation.timestamp || 0) / 3600000)}`;
+    if (seenDonationKeys.has(key)) {
+      return false;
+    }
+    seenDonationKeys.add(key);
+    return true;
+  });
+  const computedCollectedFromDonations = dedupedDonations.reduce((sum, donation) => sum + Number(donation.amount || 0), 0);
+  const computedDonorsFromDonations = dedupedDonations.length;
+  const filledCollected = Math.max(0, Math.max(collected || 0, computedCollectedFromDonations));
+  const filledDonors = Math.max(0, Math.max(donors || 0, computedDonorsFromDonations));
   const percentage = filledTarget > 0 ? Math.min((filledCollected / filledTarget) * 100, 100) : 0;
 
   return (
