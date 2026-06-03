@@ -2178,9 +2178,11 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     filteredCampaigns = [...filteredCampaigns].sort((a, b) => (b.collected / b.target) - (a.collected / a.target));
   }
 
-  const prioritizedCampaignIds = new Set([1, 2, 3, 4, 5, 6]);
-  const prioritizedCampaigns = filteredCampaigns.filter((campaign) => prioritizedCampaignIds.has(campaign.id));
-  const otherCampaigns = filteredCampaigns.filter((campaign) => !prioritizedCampaignIds.has(campaign.id));
+  const seededCampaignOrder = [6, 5, 4, 3, 2, 1];
+  const prioritizedCampaigns = filteredCampaigns
+    .filter((campaign) => seededCampaignOrder.includes(campaign.id))
+    .sort((a, b) => seededCampaignOrder.indexOf(a.id) - seededCampaignOrder.indexOf(b.id));
+  const otherCampaigns = filteredCampaigns.filter((campaign) => !seededCampaignOrder.includes(campaign.id));
   filteredCampaigns = [...prioritizedCampaigns, ...otherCampaigns];
 
   // Pagination logic
