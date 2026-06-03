@@ -46,10 +46,8 @@ export function CampaignCard({
   });
   const computedCollectedFromDonations = dedupedDonations.reduce((sum, donation) => sum + Number(donation.amount || 0), 0);
   const computedDonorsFromDonations = dedupedDonations.length;
-  const safeCollected = Number.isFinite(Number(collected)) ? Number(collected) : computedCollectedFromDonations;
-  const safeDonors = Number.isFinite(Number(donors)) ? Number(donors) : computedDonorsFromDonations;
-  const filledCollected = Math.max(0, safeCollected);
-  const filledDonors = Math.max(0, safeDonors);
+  const filledCollected = Math.max(0, Math.max(collected || 0, computedCollectedFromDonations));
+  const filledDonors = Math.max(0, Math.max(donors || 0, computedDonorsFromDonations));
   const percentage = filledTarget > 0 ? Math.min((filledCollected / filledTarget) * 100, 100) : 0;
 
   return (
