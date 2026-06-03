@@ -736,23 +736,47 @@ export default function App() {
 
       const isSeedDemoCampaign = Number.isFinite(remote.id) && remote.id > 0 && remote.id <= 6;
 
-      // For seeded campaigns: if local has higher collected/donors, trust the local state entirely
-      // because seeded campaigns are primarily local and shouldn't be downgraded by stale backend data
+      // For seeded campaigns: prefer local state when it contains newer or authoritative donations.
+      // Seeded campaigns are local-first; avoid downgrading local donations with stale backend data.
       if (isSeedDemoCampaign) {
         const localCollected = toSafeNumber(local.collected, 0);
         const remoteCollected = toSafeNumber(remote.collected, 0);
-        if (localCollected >= remoteCollected) {
-          // Use local state as-is, just merge remote donations we don't have locally
-          const localDonations = Array.isArray(local.donations) ? local.donations : [];
-          const remoteDonations = Array.isArray(remote.donations) ? remote.donations : [];
-          
+
+        const localDonations = Array.isArray(local.donations) ? local.donations : [];
+        const remoteDonations = Array.isArray(remote.donations) ? remote.donations : [];
+
+        const localMaxTs = localDonations.reduce((m, d) => Math.max(m, Number(d?.timestamp || 0)), 0);
+        const remoteMaxTs = remoteDonations.reduce((m, d) => Math.max(m, Number(d?.timestamp || 0)), 0);
+
+        const localHasCurrentUserDonation = localDonations.some((d) => {
+          try {
+            const donorEmail = normalizeEmail((d as any).email || (d as any).ownerEmail || '');
+            return donorEmail && currentUserEmail && donorEmail === currentUserEmail;
+          } catch {
+            return false;
+          }
+        });
+
+        const localHasRecentDonation = localDonations.some((d) => (d.timestamp || 0) >= (now - recentWindowMs));
+
+        // Choose local when:
+        // - localCollected >= remoteCollected (existing behavior), OR
+        // - local has a donation newer or equal to remote's newest donation, OR
+        // - local contains a donation from current user, OR
+        // - local has a very recent donation (within recent window)
+        const preferLocal = (
+          localCollected >= remoteCollected
+          || (localDonations.length > 0 && localMaxTs >= remoteMaxTs)
+          || localHasCurrentUserDonation
+          || localHasRecentDonation
+        );
+
+        if (preferLocal) {
           const combined = [...localDonations, ...remoteDonations];
           const seen = new Set<string>();
           const mergedDonations = combined.filter((donation) => {
             const key = `${String(donation.name || '').trim().toLowerCase()}|${donation.amount}|${String(donation.message || '').trim().toLowerCase()}|${Math.floor((donation.timestamp || 0) / 1000)}`;
-            if (seen.has(key)) {
-              return false;
-            }
+            if (seen.has(key)) return false;
             seen.add(key);
             return true;
           }).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
@@ -2335,6 +2359,14 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                     }
                   : campaign
               ));
+
+              // Create a snapshot of the updated campaign so the detail view shows
+              // the newly-applied local donation immediately and does not flash back
+              const updated = nextCampaigns.find(c => c.id === selectedCampaignData.id);
+              if (updated) {
+                selectedCampaignSnapshotRef.current = { ...updated, localOnly: true } as any;
+                setSelectedCampaignSource('snapshot');
+              }
 
               try {
                 window.localStorage.setItem(campaignStorageKey, JSON.stringify(nextCampaigns));
