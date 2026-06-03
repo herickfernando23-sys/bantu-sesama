@@ -856,8 +856,7 @@ export default function App() {
   const syncCampaignsFromServer = async (
     cancelledRef?: { current: boolean },
     extraHiddenDemoCampaignIds: number[] = [],
-    localCampaignsOverride?: CampaignRecord[],
-    forceApply = false
+    localCampaignsOverride?: CampaignRecord[]
   ): Promise<boolean> => {
     const now = Date.now();
     if (syncCampaignsInFlightRef.current || (now - lastCampaignSyncAtRef.current) < 5000) {
@@ -925,7 +924,7 @@ export default function App() {
         return false;
       }
 
-      if (!forceApply && remoteCampaigns.length === 0) {
+      if (remoteCampaigns.length === 0) {
         // Keep existing campaigns when server temporarily returns an empty list
         // to avoid UI flicker (appears then disappears) during intermittent sync.
         console.warn('[CampaignSync] Ignoring empty campaign sync result to preserve current list');
@@ -936,7 +935,7 @@ export default function App() {
         campaign.status !== 'pending' && campaign.status !== 'rejected'
       ));
 
-      if (!forceApply && page !== 'admin' && !hasPublicCampaign) {
+      if (page !== 'admin' && !hasPublicCampaign) {
         // Public page hides pending/rejected campaigns. If server only returns those,
         // keep current visible list instead of replacing it with an apparently empty UI.
         console.warn('[CampaignSync] Ignoring non-public-only sync result on public page');
@@ -1483,7 +1482,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
       // Pass hydrationCampaigns (which includes seeded) to syncCampaignsFromServer as override source
       // This ensures seeded campaigns are available for restoration even if campaigns state hasn't updated
-      const synced = await syncCampaignsFromServer({ current: cancelled }, [], hydrationCampaigns, true);
+      const synced = await syncCampaignsFromServer({ current: cancelled }, [], hydrationCampaigns);
       if (!cancelled && !synced && localCampaigns !== null && localCampaigns.length > 0) {
         // Ensure seeded campaigns are preserved even if sync fails
         const currentSeeded = campaigns.filter((c) => c.id >= 1 && c.id <= 6);
@@ -2387,7 +2386,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
                 // ignore localStorage write failures
               }
 
-              void syncCampaignsFromServer(undefined, [], nextCampaigns, true);
+              void syncCampaignsFromServer(undefined, [], nextCampaigns);
               return nextCampaigns;
             });
           }}
