@@ -2388,6 +2388,30 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
               }
 
               void syncCampaignsFromServer(undefined, [], nextCampaigns, true);
+
+              // Try to persist the donation to the server (dev helper).
+              // If the server supports /api/dev/mark-donation-succeeded it will
+              // create a succeeded donation so other devices see the update.
+              (async () => {
+                try {
+                  await fetch(apiUrl('/api/dev/mark-donation-succeeded'), {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                      campaignId: selectedCampaignData.id,
+                      amount,
+                      name: donorInfo.name,
+                      email: user?.email || donorInfo.email || undefined,
+                      message: donorInfo.message || ''
+                    })
+                  });
+
+                  // Re-sync to pick up server-side aggregated totals
+                  void syncCampaignsFromServer(undefined, [], undefined, true);
+                } catch (err) {
+                  // ignore dev endpoint failures
+                }
+              })();
               return nextCampaigns;
             });
           }}

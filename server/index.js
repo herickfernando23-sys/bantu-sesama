@@ -17,6 +17,7 @@ const tipsRoutes = require('./routes/tips');
 const sponsorBannersRoutes = require('./routes/sponsor_banners');
 const adminWithdrawalsRoutes = require('./routes/admin_withdrawals');
 const recurringService = require('./services/recurringPaymentService');
+const devRoutes = require('./routes/dev');
 
 const app = express();
 const isProduction = process.env.NODE_ENV === 'production';
@@ -181,6 +182,9 @@ app.use('/api/recurring', recurringRoutes);
 app.use('/api/tips', tipsRoutes);
 app.use('/api/sponsor-banners', sponsorBannersRoutes);
 app.use('/api/admin/withdrawals', adminWithdrawalsRoutes);
+if (process.env.NODE_ENV !== 'production') {
+  app.use('/api/dev', devRoutes);
+}
 
 // Serve uploaded files
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
