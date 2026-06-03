@@ -732,9 +732,6 @@ export default function App() {
 
       const remoteDonations = Array.isArray(remote.donations) ? remote.donations : [];
       const localDonations = Array.isArray(local.donations) ? local.donations : [];
-      if (localDonations.length === 0) {
-        return remote;
-      }
 
       // Keep local donations that either belong to the current logged-in user
       // (ownerEmail/email matches), or are very recent (within recentWindowMs).
