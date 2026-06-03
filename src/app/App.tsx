@@ -1328,7 +1328,7 @@ Dengan bantuan Anda, Ibu Ani bisa kembali produktif dan menghidupi keluarganya! 
       image: 'https://images.unsplash.com/photo-1757763006278-d0fa5d582d0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
       location: 'Bogor',
       target: 20000000,
-      collected: 5550000,
+      collected: 5400000,
       donors: 52,
       daysLeft: 30,
       category: 'UMKM Terdampak Bencana',
@@ -2606,7 +2606,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
           <div className="fixed top-20 left-0 right-0 z-50 mx-auto px-4 sm:px-6 lg:px-8 flex justify-center">
             <div className="max-w-7xl w-full rounded-xl border border-rose-300 bg-rose-50 px-4 py-3 text-rose-900 flex items-center justify-between gap-3">
               <span>
-                User {deletedUserUndoState.email} dihapus. Undo tersedia {Math.max(0, Math.ceil((deletedUserUndoState.expiresAt - undoNow) / 1000))} detik.
+                User {deletedUserUndoState?.email} dihapus. Undo tersedia {Math.max(0, Math.ceil(((deletedUserUndoState?.expiresAt ?? 0) - undoNow) / 1000))} detik.
               </span>
               <button
                 onClick={undoDeletedUser}
