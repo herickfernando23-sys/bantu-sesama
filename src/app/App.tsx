@@ -732,10 +732,17 @@ export default function App() {
 
       const remoteDonations = Array.isArray(remote.donations) ? remote.donations : [];
       const localDonations = Array.isArray(local.donations) ? local.donations : [];
+      const isSeedDemoCampaign = Number.isFinite(remote.id) && remote.id > 0 && remote.id <= 6;
 
-      // Keep local donations that either belong to the current logged-in user
-      // (ownerEmail/email matches), or are very recent (within recentWindowMs).
+      // Keep all local donations for seeded demo campaigns because those campaigns may
+      // be backed by local state only and should not be overwritten by stale backend data.
+      // For non-seeded campaigns, preserve local donations for the current user or
+      // very recent anonymous donations.
       const preservedLocal = localDonations.filter((d) => {
+        if (isSeedDemoCampaign) {
+          return true;
+        }
+
         try {
           const donorEmail = normalizeEmail((d as any).email || (d as any).ownerEmail || '');
           if (donorEmail && currentUserEmail && donorEmail === currentUserEmail) return true;
@@ -760,6 +767,7 @@ export default function App() {
 
       return {
         ...remote,
+        ...(isSeedDemoCampaign ? local : {}),
         collected: Math.max(remote.collected, local.collected),
         donors: Math.max(remote.donors, local.donors, mergedDonations.length),
         donations: mergedDonations
