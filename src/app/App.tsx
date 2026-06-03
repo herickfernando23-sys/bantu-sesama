@@ -713,15 +713,14 @@ export default function App() {
   };
 
   const mergeLocalSeededCampaignUpdates = (remoteCampaigns: CampaignRecord[], localCampaigns: CampaignRecord[]) => {
-    // Map local campaigns by id for quick lookup (include all ids so we can
-    // preserve recent/local donations for the current user, not only seeded ids).
+    // Map local campaigns by id for quick lookup
     const localById = new Map(localCampaigns
       .filter((campaign) => Number.isFinite(campaign.id) && campaign.id > 0)
       .map((campaign) => [campaign.id, campaign] as const)
     );
 
     const now = Date.now();
-    const recentWindowMs = 2 * 60 * 1000; // 2 minutes: treat very recent local donations as authoritative for UX
+    const recentWindowMs = 2 * 60 * 1000;
     const currentUserEmail = normalizeEmail(user?.email ?? '');
 
     return remoteCampaigns.map((remote) => {
@@ -730,14 +729,40 @@ export default function App() {
         return remote;
       }
 
-      const remoteDonations = Array.isArray(remote.donations) ? remote.donations : [];
-      const localDonations = Array.isArray(local.donations) ? local.donations : [];
       const isSeedDemoCampaign = Number.isFinite(remote.id) && remote.id > 0 && remote.id <= 6;
 
-      // Keep all local donations for seeded demo campaigns because those campaigns may
-      // be backed by local state only and should not be overwritten by stale backend data.
-      // For non-seeded campaigns, preserve local donations for the current user or
-      // very recent anonymous donations.
+      // For seeded campaigns: if local has higher collected/donors, trust the local state entirely
+      // because seeded campaigns are primarily local and shouldn't be downgraded by stale backend data
+      if (isSeedDemoCampaign) {
+        const localCollected = toSafeNumber(local.collected, 0);
+        const remoteCollected = toSafeNumber(remote.collected, 0);
+        if (localCollected >= remoteCollected) {
+          // Use local state as-is, just merge remote donations we don't have locally
+          const localDonations = Array.isArray(local.donations) ? local.donations : [];
+          const remoteDonations = Array.isArray(remote.donations) ? remote.donations : [];
+          
+          const combined = [...localDonations, ...remoteDonations];
+          const seen = new Set<string>();
+          const mergedDonations = combined.filter((donation) => {
+            const key = `${String(donation.name || '').trim().toLowerCase()}|${donation.amount}|${String(donation.message || '').trim().toLowerCase()}|${Math.floor((donation.timestamp || 0) / 1000)}`;
+            if (seen.has(key)) {
+              return false;
+            }
+            seen.add(key);
+            return true;
+          }).sort((a, b) => (b.timestamp || 0) - (a.timestamp || 0));
+
+          return {
+            ...local,
+            donations: mergedDonations
+          };
+        }
+      }
+
+      // For non-seeded or remote-higher seeded campaigns, do standard merge
+      const remoteDonations = Array.isArray(remote.donations) ? remote.donations : [];
+      const localDonations = Array.isArray(local.donations) ? local.donations : [];
+
       const preservedLocal = localDonations.filter((d) => {
         if (isSeedDemoCampaign) {
           return true;
@@ -753,7 +778,6 @@ export default function App() {
         return false;
       });
 
-      // Merge remote donations with preserved local donations, dedupe by key
       const combined = [...remoteDonations, ...preservedLocal];
       const seen = new Set<string>();
       const mergedDonations = combined.filter((donation) => {
@@ -767,7 +791,6 @@ export default function App() {
 
       return {
         ...remote,
-        ...(isSeedDemoCampaign ? local : {}),
         collected: Math.max(remote.collected, local.collected),
         donors: Math.max(remote.donors, local.donors, mergedDonations.length),
         donations: mergedDonations
@@ -835,8 +858,21 @@ export default function App() {
       const localCampaignsToMerge = localCampaignsOverride ?? campaigns;
       remoteCampaigns = mergeLocalSeededCampaignUpdates(remoteCampaigns, localCampaignsToMerge);
 
-      // mergeLocalSeededCampaignUpdates already preserves seeded campaigns (IDs 1..6) from local state,
-      // so no need for additional preservation logic here.
+      // Restore any missing seeded campaigns (1..6) from local state that weren't in the remote list
+      const remoteSeededIds = new Set(remoteCampaigns
+        .filter((c) => c.id >= 1 && c.id <= 6)
+        .map((c) => c.id)
+      );
+      const missingSeededCampaigns = localCampaignsToMerge.filter((campaign) => (
+        campaign.id >= 1
+        && campaign.id <= 6
+        && campaign.status !== 'rejected'
+        && !hiddenDemoIds.has(campaign.id)
+        && !remoteSeededIds.has(campaign.id)
+      ));
+      if (missingSeededCampaigns.length > 0) {
+        remoteCampaigns = dedupeCampaigns([...remoteCampaigns, ...missingSeededCampaigns]);
+      }
 
       if (cancelledRef?.current) {
         return false;
