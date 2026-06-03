@@ -41,20 +41,40 @@ async function main() {
         organizer: 'Karang Taruna Jakarta Timur',
         image: 'https://images.unsplash.com/photo-1767678384957-7ba885ab06d6?q=80&w=1080',
         status: 'verified',
-        daysLeft: 25
+        daysLeft: 25,
+        disbursementHistory: [
+          { date: '25 Mar', amount: 3000000, purpose: 'Pencairan Tahap 1: Renovasi awal' },
+          { date: '1 Apr', amount: 2500000, purpose: 'Pembelian peralatan dapur' },
+          { date: '10 Apr', amount: 3000000, purpose: 'Pembayaran tenaga kerja renovasi' }
+        ],
+        seededDonations: [
+          { name: 'Rafi Pratama', email: 'rafi.pratama@example.test', amount: 250000, message: 'Semoga warung Bu Siti cepat pulih.' },
+          { name: 'Nadia Lestari', email: 'nadia.lestari@example.test', amount: 500000, message: 'Titip doa dari Bandung.' },
+          { name: 'Komunitas Kuliner Jaktim', email: 'kuliner.jaktim@example.test', amount: 1000000, message: 'Dukungan untuk UMKM lokal.' }
+        ]
       },
       {
         title: 'Modal Usaha Korban Kebakaran Pasar',
         description: 'Puluhan pedagang kehilangan barang dagangan, butuh modal awal untuk berjualan kembali.',
         fullDescription: 'Kebakaran hebat di pasar menghanguskan kios-kios. Dana akan dipakai untuk membeli stok dan perlengkapan jualan.',
         goal: 50000000,
-        collected: 3250000,
+        collected: 32500000,
         location: 'Jakarta Selatan',
         category: 'UMKM Terdampak Bencana',
         organizer: 'Paguyuban Pedagang Pasar Minggu',
         image: 'https://images.unsplash.com/photo-1774370793502-85098cd3fd00?q=80&w=1080',
         status: 'verified',
-        daysLeft: 18
+        daysLeft: 18,
+        disbursementHistory: [
+          { date: '8 Apr', amount: 10000000, purpose: 'Pencairan modal awal untuk 10 pedagang' },
+          { date: '15 Apr', amount: 12500000, purpose: 'Pencairan modal lanjutan untuk 12 pedagang' },
+          { date: '22 Apr', amount: 10000000, purpose: 'Sewa kios sementara dan pengadaan stok' }
+        ],
+        seededDonations: [
+          { name: 'Dian Saputra', email: 'dian.saputra@example.test', amount: 300000, message: 'Semoga para pedagang segera bangkit.' },
+          { name: 'Salsa Maharani', email: 'salsa.maharani@example.test', amount: 450000, message: 'Mari saling bantu sesama.' },
+          { name: 'Arif Wibowo', email: 'arif.wibowo@example.test', amount: 750000, message: 'Dukungan kecil untuk usaha besar.' }
+        ]
       },
       {
         title: 'Gerobak Baru untuk Pak Joko',
@@ -67,7 +87,17 @@ async function main() {
         organizer: 'Komunitas Pedagang Kaki Lima Bandung',
         image: 'https://images.unsplash.com/photo-1762592957827-99db60cfd0c7?q=80&w=1080',
         status: 'verified',
-        daysLeft: 12
+        daysLeft: 12,
+        disbursementHistory: [
+          { date: '28 Mar', amount: 2500000, purpose: 'DP gerobak sate' },
+          { date: '5 Apr', amount: 2200000, purpose: 'Pembelian kompor dan peralatan' },
+          { date: '12 Apr', amount: 1500000, purpose: 'Pembelian bahan baku awal' }
+        ],
+        seededDonations: [
+          { name: 'Reno Maulana', email: 'reno.maulana@example.test', amount: 200000, message: 'Semangat terus Pak Joko.' },
+          { name: 'Yuni Kartika', email: 'yuni.kartika@example.test', amount: 350000, message: 'Semoga usaha sate kembali lancar.' },
+          { name: 'Bima Nugraha', email: 'bima.nugraha@example.test', amount: 500000, message: 'Dukungan untuk UMKM lokal.' }
+        ]
       },
       {
         title: 'Bantuan Modal Toko Kelontong Ibu Rani',
@@ -80,7 +110,15 @@ async function main() {
         organizer: 'Komunitas Wirausaha Lokal',
         image: 'https://images.unsplash.com/photo-1526318472351-c75fcf07060a?q=80&w=1080',
         status: 'verified',
-        daysLeft: 20
+        daysLeft: 20,
+        disbursementHistory: [
+          { date: '2 Apr', amount: 1200000, purpose: 'Pembelian stok sembako awal' },
+          { date: '12 Apr', amount: 1300000, purpose: 'Penambahan stok makanan dan minuman' }
+        ],
+        seededDonations: [
+          { name: 'Lina Kusuma', email: 'lina.kusuma@example.test', amount: 450000, message: 'Semoga kelontong Ibu Rani makin maju.' },
+          { name: 'Sari Wulandari', email: 'sari.wulandari@example.test', amount: 400000, message: 'Bantuan kecil untuk ibu rani.' }
+        ]
       },
       {
         title: 'Dukungan Untuk Tukang Jahit Kecil',
@@ -93,7 +131,15 @@ async function main() {
         organizer: 'Yogyakarta Craft',
         image: 'https://images.unsplash.com/photo-1520975913733-5a1f8a5b2b0a?q=80&w=1080',
         status: 'verified',
-        daysLeft: 30
+        daysLeft: 30,
+        disbursementHistory: [
+          { date: '5 Apr', amount: 600000, purpose: 'Pembelian mesin jahit portable' },
+          { date: '14 Apr', amount: 600000, purpose: 'Pembelian kain dan benang' }
+        ],
+        seededDonations: [
+          { name: 'Putri Azzahra', email: 'putri.azzahra@example.test', amount: 200000, message: 'Semoga tukang jahit bisa kembali buka.' },
+          { name: 'Dimas Prakoso', email: 'dimas.prakoso@example.test', amount: 350000, message: 'Dukungan untuk pelaku UMKM.' }
+        ]
       }
     ];
 
@@ -110,28 +156,52 @@ async function main() {
         category: sc.category,
         image: sc.image,
         status: sc.status || 'pending',
-        daysLeft: sc.daysLeft || 30
+        daysLeft: sc.daysLeft || 30,
+        disbursementHistory: Array.isArray(sc.disbursementHistory) ? sc.disbursementHistory : []
       }});
 
-      // create a few donations so campaign detail shows donors
-      const existingDonations = await Donation.count({ where: { campaignId: cam.id } });
-      if (existingDonations < 5) {
-        const donorsToCreate = 5;
-        for (let i = 0; i < donorsToCreate; i++) {
-          const amt = Math.floor(Math.random() * 10 + 1) * 100000; // 100k..1.1M
+      if (!Array.isArray(cam.disbursementHistory) || cam.disbursementHistory.length === 0) {
+        cam.disbursementHistory = Array.isArray(sc.disbursementHistory) ? sc.disbursementHistory : [];
+        await cam.save();
+      }
+
+      const existingDonations = await Donation.findAll({ where: { campaignId: cam.id } });
+      const seedDonations = Array.isArray(sc.seededDonations) ? sc.seededDonations : [];
+
+      if (existingDonations.length === 0 && seedDonations.length > 0) {
+        for (let i = 0; i < seedDonations.length; i++) {
+          const seed = seedDonations[i];
+          const amount = Number(seed.amount || 0);
+          if (!Number.isFinite(amount) || amount <= 0) continue;
+
           await Donation.create({
             campaignId: cam.id,
             userId: user.id,
-            amount: amt,
+            amount,
             currency: 'IDR',
             paymentStatus: 'succeeded',
-            donorName: `Donatur ${i+1}`,
-            donorEmail: `donor${i+1}@example.test`,
-            message: 'Dari seed'
+            donorName: String(seed.name || `Donor ${i + 1}`).trim(),
+            donorEmail: String(seed.email || `donor${i + 1}@example.test`).trim(),
+            message: String(seed.message || '').trim(),
+            createdAt: new Date(Date.now() - ((seedDonations.length - i) * 2) * 24 * 60 * 60 * 1000),
+            updatedAt: new Date(Date.now() - ((seedDonations.length - i) * 2) * 24 * 60 * 60 * 1000)
           });
-          cam.collected = (parseFloat(cam.collected) || 0) + amt;
+          cam.collected = (parseFloat(cam.collected) || 0) + amount;
         }
         await cam.save();
+      } else if (existingDonations.length > 0) {
+        const updateCandidates = existingDonations.filter((donation) => /^Donatur\s*\d+$/i.test(donation.donorName || '')).slice(0, seedDonations.length);
+        for (let i = 0; i < updateCandidates.length; i++) {
+          const seed = seedDonations[i];
+          if (!seed) break;
+          const donation = updateCandidates[i];
+          donation.donorName = String(seed.name || donation.donorName).trim();
+          donation.donorEmail = String(seed.email || donation.donorEmail).trim();
+          donation.message = String(seed.message || donation.message).trim();
+          donation.createdAt = new Date(Date.now() - ((seedDonations.length - i) * 2) * 24 * 60 * 60 * 1000);
+          donation.updatedAt = donation.createdAt;
+          await donation.save();
+        }
       }
     }
 

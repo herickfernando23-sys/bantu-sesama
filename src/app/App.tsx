@@ -166,36 +166,39 @@ const legacyPaginationMockTitles = new Set([
   'Dukungan UMKM Lokal'
 ]);
 
+const DAY_MS = 24 * 60 * 60 * 1000;
+const now = Date.now();
+
 const seededDemoDonationsByCampaignId: Record<number, Array<{ name: string; amount: number; message: string; timestamp: number }>> = {
   1: [
-    { name: 'Rafi Pratama', amount: 250000, message: 'Semoga warung Bu Siti cepat pulih.', timestamp: 1718835600000 },
-    { name: 'Nadia Lestari', amount: 500000, message: 'Titip doa dari Bandung.', timestamp: 1718922000000 },
-    { name: 'Komunitas Kuliner Jaktim', amount: 1000000, message: 'Dukungan untuk UMKM lokal.', timestamp: 1719008400000 }
+    { name: 'Rafi Pratama', amount: 250000, message: 'Semoga warung Bu Siti cepat pulih.', timestamp: now - 3 * DAY_MS },
+    { name: 'Nadia Lestari', amount: 500000, message: 'Titip doa dari Bandung.', timestamp: now - 2 * DAY_MS },
+    { name: 'Komunitas Kuliner Jaktim', amount: 1000000, message: 'Dukungan untuk UMKM lokal.', timestamp: now - 1 * DAY_MS }
   ],
   2: [
-    { name: 'Dian Saputra', amount: 300000, message: 'Semoga para pedagang segera bangkit.', timestamp: 1719094800000 },
-    { name: 'Salsa Maharani', amount: 450000, message: 'Bersama kita pulihkan pasar.', timestamp: 1719181200000 },
-    { name: 'Arif Wibowo', amount: 750000, message: '', timestamp: 1719267600000 }
+    { name: 'Dian Saputra', amount: 300000, message: 'Semoga para pedagang segera bangkit.', timestamp: now - 4 * DAY_MS },
+    { name: 'Salsa Maharani', amount: 450000, message: 'Bersama kita pulihkan pasar.', timestamp: now - 3 * DAY_MS },
+    { name: 'Arif Wibowo', amount: 750000, message: '', timestamp: now - 2 * DAY_MS }
   ],
   3: [
-    { name: 'Reno Maulana', amount: 200000, message: 'Semangat terus Pak Joko.', timestamp: 1719354000000 },
-    { name: 'Yuni Kartika', amount: 350000, message: 'Semoga jualan sate lancar lagi.', timestamp: 1719440400000 },
-    { name: 'Bima Nugraha', amount: 500000, message: '', timestamp: 1719526800000 }
+    { name: 'Reno Maulana', amount: 200000, message: 'Semangat terus Pak Joko.', timestamp: now - 5 * DAY_MS },
+    { name: 'Yuni Kartika', amount: 350000, message: 'Semoga jualan sate lancar lagi.', timestamp: now - 4 * DAY_MS },
+    { name: 'Bima Nugraha', amount: 500000, message: '', timestamp: now - 3 * DAY_MS }
   ],
   4: [
-    { name: 'Ica Permata', amount: 150000, message: 'Semoga Ibu Ani segera bisa terima order lagi.', timestamp: 1719613200000 },
-    { name: 'Tegar Ananda', amount: 300000, message: '', timestamp: 1719699600000 },
-    { name: 'Lina Kusuma', amount: 450000, message: 'Semoga usaha jahitnya makin maju.', timestamp: 1719786000000 }
+    { name: 'Ica Permata', amount: 150000, message: 'Semoga Ibu Ani segera bisa terima order lagi.', timestamp: now - 5 * DAY_MS },
+    { name: 'Tegar Ananda', amount: 300000, message: '', timestamp: now - 4 * DAY_MS },
+    { name: 'Lina Kusuma', amount: 450000, message: 'Semoga usaha jahitnya makin maju.', timestamp: now - 3 * DAY_MS }
   ],
   5: [
-    { name: 'Fajar Rahman', amount: 250000, message: 'Semoga warung kopi cepat buka kembali.', timestamp: 1719872400000 },
-    { name: 'Wulan Sari', amount: 400000, message: 'Dukungan untuk Mas Budi.', timestamp: 1719958800000 },
-    { name: 'Yoga Firmansyah', amount: 600000, message: '', timestamp: 1720045200000 }
+    { name: 'Fajar Rahman', amount: 250000, message: 'Semoga warung kopi cepat buka kembali.', timestamp: now - 4 * DAY_MS },
+    { name: 'Wulan Sari', amount: 400000, message: 'Dukungan untuk Mas Budi.', timestamp: now - 3 * DAY_MS },
+    { name: 'Yoga Firmansyah', amount: 600000, message: '', timestamp: now - 2 * DAY_MS }
   ],
   6: [
-    { name: 'Putri Azzahra', amount: 200000, message: 'Semoga Bu Wati segera bisa jualan lagi.', timestamp: 1720131600000 },
-    { name: 'Dimas Prakoso', amount: 350000, message: '', timestamp: 1720218000000 },
-    { name: 'Naufal Hadi', amount: 500000, message: 'Semoga lancar rezekinya.', timestamp: 1720304400000 }
+    { name: 'Putri Azzahra', amount: 200000, message: 'Semoga Bu Wati segera bisa jualan lagi.', timestamp: now - 4 * DAY_MS },
+    { name: 'Dimas Prakoso', amount: 350000, message: '', timestamp: now - 3 * DAY_MS },
+    { name: 'Naufal Hadi', amount: 500000, message: 'Semoga lancar rezekinya.', timestamp: now - 2 * DAY_MS }
   ]
 };
 

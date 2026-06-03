@@ -205,10 +205,10 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
 
     const now = new Date();
     const diffMs = now.getTime() - parsedDate.getTime();
-    const diffSeconds = Math.round(diffMs / 1000);
-    const diffMinutes = Math.round(diffMs / 60_000);
-    const diffHours = Math.round(diffMs / 3_600_000);
-    const diffDays = Math.round(diffMs / 86_400_000);
+    const diffSeconds = Math.floor(diffMs / 1000);
+    const diffMinutes = Math.floor(diffMs / 60_000);
+    const diffHours = Math.floor(diffMs / 3_600_000);
+    const diffDays = Math.floor(diffMs / 86_400_000);
 
     if (diffSeconds < 60) {
       return 'Beberapa detik yang lalu';
@@ -219,7 +219,15 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
     if (diffHours < 24) {
       return `${diffHours} jam yang lalu`;
     }
-    return `${diffDays} hari yang lalu`;
+    if (diffDays < 30) {
+      return `${diffDays} hari yang lalu`;
+    }
+    if (diffDays < 365) {
+      const diffMonths = Math.floor(diffDays / 30);
+      return `${diffMonths} bulan yang lalu`;
+    }
+    const diffYears = Math.floor(diffDays / 365);
+    return `${diffYears} tahun yang lalu`;
   };
   
   const donorEntries = (() => {
