@@ -835,18 +835,8 @@ export default function App() {
       const localCampaignsToMerge = localCampaignsOverride ?? campaigns;
       remoteCampaigns = mergeLocalSeededCampaignUpdates(remoteCampaigns, localCampaignsToMerge);
 
-      // Preserve the original seeded campaigns (IDs 1..6) from local state so
-      // they don't disappear when backend currently returns only newly added rows.
-      const preservedSeedCampaigns = localCampaignsToMerge.filter((campaign) => (
-        campaign.id >= 1
-        && campaign.id <= 6
-        && campaign.status !== 'rejected'
-        && !hiddenDemoIds.has(campaign.id)
-      ));
-
-      if (preservedSeedCampaigns.length > 0) {
-        remoteCampaigns = dedupeCampaigns([...remoteCampaigns, ...preservedSeedCampaigns]);
-      }
+      // mergeLocalSeededCampaignUpdates already preserves seeded campaigns (IDs 1..6) from local state,
+      // so no need for additional preservation logic here.
 
       if (cancelledRef?.current) {
         return false;
