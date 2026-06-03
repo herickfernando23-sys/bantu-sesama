@@ -1140,6 +1140,36 @@ export default function App() {
     setSelectedCampaignSource('id');
   };
 
+  useEffect(() => {
+    if (!selectedCampaign) {
+      return;
+    }
+
+    let cancelled = false;
+    const refreshSelectedCampaign = async () => {
+      try {
+        const response = await fetch(apiUrl(`/api/campaigns/${selectedCampaign}?_=${Date.now()}`), { cache: 'no-store' });
+        if (!response.ok || cancelled) {
+          return;
+        }
+
+        const campaign = normalizeCampaignRecord(await response.json());
+        setCampaigns((prev) => {
+          const found = prev.some((c) => c.id === campaign.id);
+          const next = prev.map((c) => (c.id === campaign.id ? campaign : c));
+          return found ? next : [...next, campaign];
+        });
+      } catch {
+        // ignore fetch errors
+      }
+    };
+
+    void refreshSelectedCampaign();
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCampaign]);
+
   const goHome = () => {
     setSelectedCampaign(null);
     setSelectedCampaignSource('id');
