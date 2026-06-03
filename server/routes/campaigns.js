@@ -68,6 +68,7 @@ router.get('/', async (req, res) => {
 
         return {
           ...plainCampaign,
+          collected: succeededDonations.reduce((sum, donation) => sum + Number(donation.amount || 0), 0),
           donors: succeededDonations.length,
           donations: succeededDonations.map((donation) => ({
             name: donation.isAnonymous ? 'Anonymous' : donation.donorName || 'Donatur',
@@ -114,6 +115,7 @@ router.get('/:id', async (req, res) => {
 
     const response = {
       ...plainCampaign,
+      collected: succeededDonations.reduce((sum, donation) => sum + Number(donation.amount || 0), 0),
       donors: succeededDonations.length,
       donations: succeededDonations.map((donation) => ({
         name: donation.isAnonymous ? 'Anonymous' : donation.donorName || 'Donatur',
