@@ -440,9 +440,10 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
     ? Math.max(normalizedDonors, normalizedDonations.length)
     : derivedDonors;
   const isSeedDemoCampaign = Number.isFinite(campaign.id) && campaign.id > 0 && campaign.id <= 6;
+  const donationTotal = normalizedDonations.reduce((sum, donation) => sum + Number(donation?.amount || 0), 0);
   const correctedCollected = hasExplicitDonorCount && finalDonors === 0 && normalizedCollected > 0 && !isSeedDemoCampaign
     ? 0
-    : normalizedCollected;
+    : Math.max(normalizedCollected, donationTotal);
 
   const migratedCampaign = migrateLegacyCampaignId(campaign);
   const normalizedId = Number(migratedCampaign.id);
