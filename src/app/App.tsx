@@ -858,18 +858,26 @@ export default function App() {
       const localCampaignsToMerge = localCampaignsOverride ?? campaigns;
       remoteCampaigns = mergeLocalSeededCampaignUpdates(remoteCampaigns, localCampaignsToMerge);
 
-      // Restore any missing seeded campaigns (1..6) from local state that weren't in the remote list
+      // Always restore seeded campaigns (1..6) - they are core to the platform and should never disappear
+      // even if backend sync returns no campaigns or incomplete data
       const remoteSeededIds = new Set(remoteCampaigns
         .filter((c) => c.id >= 1 && c.id <= 6)
         .map((c) => c.id)
       );
-      const missingSeededCampaigns = localCampaignsToMerge.filter((campaign) => (
-        campaign.id >= 1
-        && campaign.id <= 6
-        && campaign.status !== 'rejected'
-        && !hiddenDemoIds.has(campaign.id)
-        && !remoteSeededIds.has(campaign.id)
-      ));
+      
+      // Collect seeded campaigns from multiple sources: local override, current state, and current campaigns
+      // This ensures we can find and restore seeded campaigns even if intermediate states are incomplete
+      const allLocalSources = [
+        ...(localCampaignsOverride || []),
+        ...campaigns
+      ];
+      const uniqueLocalSources = new Map(allLocalSources.map((c) => [c.id, c] as const));
+      
+      const missingSeededCampaigns = Array.from({ length: 6 }, (_, i) => i + 1)
+        .filter((id) => !remoteSeededIds.has(id) && !hiddenDemoIds.has(id))
+        .map((id) => uniqueLocalSources.get(id))
+        .filter((c): c is CampaignRecord => c !== undefined && c.status !== 'rejected');
+      
       if (missingSeededCampaigns.length > 0) {
         remoteCampaigns = dedupeCampaigns([...remoteCampaigns, ...missingSeededCampaigns]);
       }
@@ -1405,17 +1413,34 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
       const shouldPrioritizeServerForAdmin = page === 'admin' && Boolean(adminUser);
 
+      // Prepare hydration campaigns with seeded campaigns always included
+      let hydrationCampaigns = campaigns; // Use initial seeded campaigns as base
+      
       if (!cancelled && !shouldPrioritizeServerForAdmin && localCampaigns !== null && localCampaigns.length > 0) {
-        setCampaigns(localCampaigns);
+        // Ensure seeded campaigns (1-6) are always preserved when hydrating from storage
+        const currentSeeded = campaigns.filter((c) => c.id >= 1 && c.id <= 6);
+        const storedSeededIds = new Set(localCampaigns.filter((c) => c.id >= 1 && c.id <= 6).map((c) => c.id));
+        const missingSeeded = currentSeeded.filter((c) => !storedSeededIds.has(c.id));
+        
+        hydrationCampaigns = dedupeCampaigns([...localCampaigns, ...missingSeeded]);
+        setCampaigns(hydrationCampaigns);
       }
 
       if (!cancelled) {
         setCampaignsHydrated(true);
       }
 
-      const synced = await syncCampaignsFromServer({ current: cancelled }, [], localCampaigns || undefined);
+      // Pass hydrationCampaigns (which includes seeded) to syncCampaignsFromServer as override source
+      // This ensures seeded campaigns are available for restoration even if campaigns state hasn't updated
+      const synced = await syncCampaignsFromServer({ current: cancelled }, [], hydrationCampaigns);
       if (!cancelled && !synced && localCampaigns !== null && localCampaigns.length > 0) {
-        setCampaigns(localCampaigns);
+        // Ensure seeded campaigns are preserved even if sync fails
+        const currentSeeded = campaigns.filter((c) => c.id >= 1 && c.id <= 6);
+        const localSeededIds = new Set(localCampaigns.filter((c) => c.id >= 1 && c.id <= 6).map((c) => c.id));
+        const missingSeeded = currentSeeded.filter((c) => !localSeededIds.has(c.id));
+        
+        const fallbackCampaigns = dedupeCampaigns([...localCampaigns, ...missingSeeded]);
+        setCampaigns(fallbackCampaigns);
       }
     })();
 
