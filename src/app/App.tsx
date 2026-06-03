@@ -1393,6 +1393,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       ]
     }
   ]);
+  const defaultSeededCampaignsRef = useRef<CampaignRecord[]>(campaigns.filter((campaign) => campaign.id >= 1 && campaign.id <= 6));
 
   useEffect(() => {
     let cancelled = false;
