@@ -634,6 +634,7 @@ export default function App() {
   const [user, setUser] = useState<AppUser | null>(persistedUser);
   const [adminUser, setAdminUser] = useState<AppUser | null>(persistedAdminUser);
   const campaignStorageKey = 'bantusesama-campaigns';
+  const campaignStorageBackupKey = 'bantusesama-campaigns-backup';
   const campaignUpdatedEventKey = 'bantusesama-campaigns-updated';
   const hiddenRejectedCampaignIdsKey = 'bantusesama-hidden-rejected-campaign-ids';
   const deletedUserEmailsKey = 'bantusesama-deleted-user-emails';
@@ -716,6 +717,61 @@ export default function App() {
       return null;
     }
   };
+
+  const loadCampaignsBackupFromStorage = () => {
+    if (typeof window === 'undefined') {
+      return null;
+    }
+
+    try {
+      const raw = window.localStorage.getItem(campaignStorageBackupKey);
+      if (!raw) {
+        return null;
+      }
+
+      const parsed = JSON.parse(raw) as CampaignRecord[];
+      if (!Array.isArray(parsed) || parsed.length === 0) {
+        return null;
+      }
+
+      return parsed.map(normalizeCampaignRecord);
+    } catch {
+      return null;
+    }
+  };
+
+  const saveCampaignsToStorage = (nextCampaigns: CampaignRecord[], preserveBackup = true) => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    try {
+      if (preserveBackup) {
+        const currentRaw = window.localStorage.getItem(campaignStorageKey);
+        if (currentRaw) {
+          window.localStorage.setItem(campaignStorageBackupKey, currentRaw);
+        }
+      }
+      window.localStorage.setItem(campaignStorageKey, JSON.stringify(nextCampaigns));
+      window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
+    } catch {
+      // ignore write failures in environments where localStorage is unavailable
+    }
+  };
+
+  const restoreCampaignsCheckpoint = () => {
+    const backup = loadCampaignsBackupFromStorage();
+    if (!backup || backup.length === 0) {
+      return false;
+    }
+
+    const restored = normalizeCampaignsForDisplay(backup, getApiBaseUrl());
+    setCampaigns(restored);
+    saveCampaignsToStorage(restored, false);
+    return true;
+  };
+
+  (window as any).restoreCampaignsCheckpoint = restoreCampaignsCheckpoint;
 
   const mergeLocalSeededCampaignUpdates = (remoteCampaigns: CampaignRecord[], localCampaigns: CampaignRecord[]) => {
     // Map local campaigns by id for quick lookup
@@ -946,8 +1002,7 @@ export default function App() {
       setCampaigns(remoteCampaigns);
       try {
         isUpdatingCampaignsLocallRef.current = true;
-        window.localStorage.setItem(campaignStorageKey, JSON.stringify(remoteCampaigns));
-        window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
+        saveCampaignsToStorage(remoteCampaigns);
       } catch {
         // ignore write failures
       } finally {
@@ -1566,8 +1621,7 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
 
     try {
       isUpdatingCampaignsLocallRef.current = true;
-      window.localStorage.setItem(campaignStorageKey, JSON.stringify(campaigns));
-      window.localStorage.setItem(campaignUpdatedEventKey, String(Date.now()));
+      saveCampaignsToStorage(campaigns);
     } catch {
       // ignore write failures in environments where localStorage is unavailable
     } finally {
@@ -2224,6 +2278,50 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     && Boolean((selectedCampaignSnapshotRef.current as any)?.localOnly)
     ? selectedCampaignSnapshotRef.current
     : campaigns.find(c => c.id === selectedCampaign) ?? (selectedCampaignSnapshotRef.current?.id === selectedCampaign ? selectedCampaignSnapshotRef.current : null);
+
+  useEffect(() => {
+    if (!selectedCampaign || selectedCampaignSource === 'snapshot') {
+      return;
+    }
+
+    let cancelled = false;
+
+    const fetchCampaignDetail = async () => {
+      try {
+        const response = await fetch(apiUrl(`/api/campaigns/${selectedCampaign}?_=${Date.now()}`), { cache: 'no-store' });
+        if (!response.ok || cancelled) {
+          return;
+        }
+
+        const campaignData = await response.json();
+        const normalizedCampaign = normalizeCampaignRecord(campaignData);
+
+        setCampaigns((prev) => {
+          const index = prev.findIndex((campaign) => campaign.id === normalizedCampaign.id);
+          if (index === -1) {
+            return [...prev, normalizedCampaign];
+          }
+
+          const existing = prev[index];
+          if (existing.collected === normalizedCampaign.collected && existing.donors === normalizedCampaign.donors) {
+            return prev;
+          }
+
+          const next = [...prev];
+          next[index] = normalizedCampaign;
+          return next;
+        });
+      } catch {
+        // ignore failures and keep current campaign data
+      }
+    };
+
+    void fetchCampaignDetail();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCampaign, selectedCampaignSource]);
 
   useEffect(() => {
     if (selectedCampaign) {
