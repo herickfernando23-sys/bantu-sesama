@@ -1140,36 +1140,6 @@ export default function App() {
     setSelectedCampaignSource('id');
   };
 
-  useEffect(() => {
-    if (!selectedCampaign) {
-      return;
-    }
-
-    let cancelled = false;
-    const refreshSelectedCampaign = async () => {
-      try {
-        const response = await fetch(apiUrl(`/api/campaigns/${selectedCampaign}?_=${Date.now()}`), { cache: 'no-store' });
-        if (!response.ok || cancelled) {
-          return;
-        }
-
-        const campaign = normalizeCampaignRecord(await response.json());
-        setCampaigns((prev) => {
-          const found = prev.some((c) => c.id === campaign.id);
-          const next = prev.map((c) => (c.id === campaign.id ? campaign : c));
-          return found ? next : [...next, campaign];
-        });
-      } catch {
-        // ignore fetch errors
-      }
-    };
-
-    void refreshSelectedCampaign();
-    return () => {
-      cancelled = true;
-    };
-  }, [selectedCampaign]);
-
   const goHome = () => {
     setSelectedCampaign(null);
     setSelectedCampaignSource('id');
@@ -1197,7 +1167,17 @@ export default function App() {
     );
   };
 
-  const getDefaultSeededCampaigns = (): CampaignRecord[] => [
+  const [campaigns, setCampaigns] = useState<CampaignRecord[]>(() => {
+    try {
+      const stored = loadCampaignsFromStorage();
+      if (stored && Array.isArray(stored) && stored.length > 0) {
+        return stored;
+      }
+    } catch {
+      // fall back to seeded defaults below
+    }
+
+    return [
     {
       id: 1,
       createdAt: 1711238400000,
@@ -1462,20 +1442,8 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       ]
     }
     ];
-
-  const [campaigns, setCampaigns] = useState<CampaignRecord[]>(() => {
-    try {
-      const stored = loadCampaignsFromStorage();
-      if (stored && Array.isArray(stored) && stored.length > 0) {
-        return stored;
-      }
-    } catch {
-      // fall back to seeded defaults below
-    }
-
-    return getDefaultSeededCampaigns();
   });
-  const defaultSeededCampaignsRef = useRef<CampaignRecord[]>(getDefaultSeededCampaigns());
+  const defaultSeededCampaignsRef = useRef<CampaignRecord[]>(campaigns.filter((campaign) => campaign.id >= 1 && campaign.id <= 6));
 
   useEffect(() => {
     let cancelled = false;
@@ -1501,9 +1469,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       
       if (!cancelled && !shouldPrioritizeServerForAdmin && localCampaigns !== null && localCampaigns.length > 0) {
         // Ensure seeded campaigns (1-6) are always preserved when hydrating from storage
-        const defaultSeededCampaigns = defaultSeededCampaignsRef.current;
+        const currentSeeded = campaigns.filter((c) => c.id >= 1 && c.id <= 6);
         const storedSeededIds = new Set(localCampaigns.filter((c) => c.id >= 1 && c.id <= 6).map((c) => c.id));
-        const missingSeeded = defaultSeededCampaigns.filter((c) => !storedSeededIds.has(c.id));
+        const missingSeeded = currentSeeded.filter((c) => !storedSeededIds.has(c.id));
         
         hydrationCampaigns = dedupeCampaigns([...localCampaigns, ...missingSeeded]);
         setCampaigns(hydrationCampaigns);
@@ -1518,9 +1486,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
       const synced = await syncCampaignsFromServer({ current: cancelled }, [], hydrationCampaigns, true);
       if (!cancelled && !synced && localCampaigns !== null && localCampaigns.length > 0) {
         // Ensure seeded campaigns are preserved even if sync fails
-        const defaultSeededCampaigns = defaultSeededCampaignsRef.current;
+        const currentSeeded = campaigns.filter((c) => c.id >= 1 && c.id <= 6);
         const localSeededIds = new Set(localCampaigns.filter((c) => c.id >= 1 && c.id <= 6).map((c) => c.id));
-        const missingSeeded = defaultSeededCampaigns.filter((c) => !localSeededIds.has(c.id));
+        const missingSeeded = currentSeeded.filter((c) => !localSeededIds.has(c.id));
         
         const fallbackCampaigns = dedupeCampaigns([...localCampaigns, ...missingSeeded]);
         setCampaigns(fallbackCampaigns);
@@ -2180,11 +2148,9 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
     filteredCampaigns = [...filteredCampaigns].sort((a, b) => (b.collected / b.target) - (a.collected / a.target));
   }
 
-  const seededCampaignOrder = [6, 5, 4, 3, 2, 1];
-  const prioritizedCampaigns = filteredCampaigns
-    .filter((campaign) => seededCampaignOrder.includes(campaign.id))
-    .sort((a, b) => seededCampaignOrder.indexOf(a.id) - seededCampaignOrder.indexOf(b.id));
-  const otherCampaigns = filteredCampaigns.filter((campaign) => !seededCampaignOrder.includes(campaign.id));
+  const prioritizedCampaignIds = new Set([1, 2, 3, 4, 5, 6]);
+  const prioritizedCampaigns = filteredCampaigns.filter((campaign) => prioritizedCampaignIds.has(campaign.id));
+  const otherCampaigns = filteredCampaigns.filter((campaign) => !prioritizedCampaignIds.has(campaign.id));
   filteredCampaigns = [...prioritizedCampaigns, ...otherCampaigns];
 
   // Pagination logic
@@ -2422,30 +2388,6 @@ Mari kita bantu Bu Wati untuk bisa berjualan lagi! 🥬`,
               }
 
               void syncCampaignsFromServer(undefined, [], nextCampaigns, true);
-
-              // Try to persist the donation to the server (dev helper).
-              // If the server supports /api/dev/mark-donation-succeeded it will
-              // create a succeeded donation so other devices see the update.
-              (async () => {
-                try {
-                  await fetch(apiUrl('/api/dev/mark-donation-succeeded'), {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                      campaignId: selectedCampaignData.id,
-                      amount,
-                      name: donorInfo.name,
-                      email: user?.email || donorInfo.email || undefined,
-                      message: donorInfo.message || ''
-                    })
-                  });
-
-                  // Re-sync to pick up server-side aggregated totals
-                  void syncCampaignsFromServer(undefined, [], undefined, true);
-                } catch (err) {
-                  // ignore dev endpoint failures
-                }
-              })();
               return nextCampaigns;
             });
           }}
