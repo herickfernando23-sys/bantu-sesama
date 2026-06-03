@@ -1328,7 +1328,7 @@ Dengan bantuan Anda, Ibu Ani bisa kembali produktif dan menghidupi keluarganya! 
       image: 'https://images.unsplash.com/photo-1757763006278-d0fa5d582d0d?crop=entropy&cs=tinysrgb&fit=max&fm=jpg&ixid=M3w3Nzg4Nzd8MHwxfHNlYXJjaHwxfHxzbWFsbCUyMGJ1c2luZXNzJTIwc2hvcCUyMGluZG9uZXNpYXxlbnwxfHx8fDE3Nzc1MzI5MzZ8MA&ixlib=rb-4.1.0&q=80&w=1080',
       location: 'Bogor',
       target: 20000000,
-      collected: 5400000,
+      collected: 5550000,
       donors: 52,
       daysLeft: 30,
       category: 'UMKM Terdampak Bencana',
