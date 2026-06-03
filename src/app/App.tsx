@@ -440,10 +440,6 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
     ? Math.max(normalizedDonors, normalizedDonations.length)
     : derivedDonors;
   const isSeedDemoCampaign = Number.isFinite(campaign.id) && campaign.id > 0 && campaign.id <= 6;
-  const donationTotal = normalizedDonations.reduce((sum, donation) => sum + Number(donation?.amount || 0), 0);
-  const correctedCollected = hasExplicitDonorCount && finalDonors === 0 && normalizedCollected > 0 && !isSeedDemoCampaign
-    ? 0
-    : Math.max(normalizedCollected, donationTotal);
 
   const migratedCampaign = migrateLegacyCampaignId(campaign);
   const normalizedId = Number(migratedCampaign.id);
@@ -451,6 +447,14 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   const seededDonations = seededDemoDonationsByCampaignId[normalizedId]
     || seededDemoDonationsByCampaignTitle[normalizedTitleKey]
     || [];
+  const effectiveDonations = normalizedDonations.length > 0
+    ? normalizedDonations
+    : seededDonations.map((donation) => ({ ...donation }));
+  const donationTotal = effectiveDonations.reduce((sum, donation) => sum + Number(donation?.amount || 0), 0);
+  const correctedCollected = hasExplicitDonorCount && finalDonors === 0 && normalizedCollected > 0 && !isSeedDemoCampaign
+    ? 0
+    : Math.max(normalizedCollected, donationTotal);
+
   const baseStatus = (campaign.status ?? 'pending') as CampaignStatus;
   const hasFundraisingProgress = correctedCollected > 0 || finalDonors > 0;
   const inferredStatus: CampaignStatus = baseStatus === 'rejected'
