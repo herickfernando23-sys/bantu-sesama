@@ -821,8 +821,7 @@ export default function App() {
         // - local contains a donation from current user, OR
         // - local has a very recent donation (within recent window)
         const preferLocal = (
-          localCollected >= remoteCollected
-          || (localDonations.length > 0 && localMaxTs >= remoteMaxTs)
+          (localDonations.length > 0 && localMaxTs >= remoteMaxTs)
           || localHasCurrentUserDonation
           || localHasRecentDonation
         );
