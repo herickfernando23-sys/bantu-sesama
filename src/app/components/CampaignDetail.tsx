@@ -199,8 +199,8 @@ export function CampaignDetail({ campaign, user, onBack, onUpdateCampaign, onReq
   const computedCollected = dedupedDonations.reduce((sum, donation) => sum + Number(donation.amount || 0), 0);
   const computedDonors = dedupedDonations.length;
 
-  const filledCollected = Math.max(0, Math.max(campaign.collected || 0, computedCollected));
-  const filledDonors = Math.max(0, Math.max(campaign.donors || 0, computedDonors));
+  const filledCollected = Math.max(0, campaign.collected > 0 ? campaign.collected : computedCollected);
+  const filledDonors = Math.max(0, campaign.donors > 0 ? campaign.donors : computedDonors);
 
   const percentage = filledTarget > 0 ? Math.min((filledCollected / filledTarget) * 100, 100) : 0;
   const canEdit = user?.email && campaign.creatorEmail && user.email.toLowerCase() === campaign.creatorEmail.toLowerCase();

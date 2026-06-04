@@ -453,7 +453,7 @@ const normalizeCampaignRecord = (campaign: CampaignRecord): CampaignRecord => {
   const donationTotal = effectiveDonations.reduce((sum, donation) => sum + Number(donation?.amount || 0), 0);
   const correctedCollected = hasExplicitDonorCount && finalDonors === 0 && normalizedCollected > 0 && !isSeedDemoCampaign
     ? 0
-    : Math.max(normalizedCollected, donationTotal);
+    : (normalizedCollected > 0 ? normalizedCollected : donationTotal);
 
   const baseStatus = (campaign.status ?? 'pending') as CampaignStatus;
   const hasFundraisingProgress = correctedCollected > 0 || finalDonors > 0;
