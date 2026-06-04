@@ -813,18 +813,9 @@ export default function App() {
           }
         });
 
-        const localHasRecentDonation = localDonations.some((d) => (d.timestamp || 0) >= (now - recentWindowMs));
-
-        // Choose local when:
-        // - localCollected >= remoteCollected (existing behavior), OR
-        // - local has a donation newer or equal to remote's newest donation, OR
-        // - local contains a donation from current user, OR
-        // - local has a very recent donation (within recent window)
-        const preferLocal = (
-          (localDonations.length > 0 && localMaxTs >= remoteMaxTs)
-          || localHasCurrentUserDonation
-          || localHasRecentDonation
-        );
+        // Preserve local state only when it contains a real user donation not yet reflected by the server.
+        // Default seeded demo donations should not override authoritative remote campaign totals.
+        const preferLocal = localHasCurrentUserDonation;
 
         if (preferLocal) {
           const combined = [...localDonations, ...remoteDonations];
